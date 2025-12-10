@@ -3,7 +3,7 @@ import type { LoginBody, OtpverifyPayload, RegisterUserBody } from "../Types/Typ
 import toast from "react-hot-toast";
 
 class AuthServices {
-    authBaseUrl = "https://task-management-backend-dr1x.onrender.com/api/";
+    authBaseUrl = "https://task-managemnt-backend-app.onrender.com/api/";
     authLoginUrl = "auth/login";
     authRegigsterUrl = "auth/register";
     authForgetPassword = "auth/forgetPassword";
@@ -97,12 +97,14 @@ class AuthServices {
                     data: null
                 };
             }
-            const response = await axios.get('http://localhost:9000/api/auth/currentUser', {
+
+            const response = await axios.get(this.authBaseUrl + this.authGetCurrentUser, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 }
             });
+
             if (response.data.error) {
                 return {
                     success: false,
