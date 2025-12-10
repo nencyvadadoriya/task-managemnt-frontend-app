@@ -50,18 +50,29 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
     const assignedUser = task.assignedToUser || getUserById(task.assignedTo);
 
-    const assignedToEmail = assignedUser?.email ||
-        (typeof task.assignedTo === 'string' ? task.assignedTo : 'Unknown');
 
     const assignedToName = assignedUser?.name ||
         (typeof task.assignedTo === 'string' ? task.assignedTo.split('@')[0] || 'User' : 'Unknown User');
 
-    // Get Assigned By Name
-    const assignedByUser = task.assignedByUser || getUserById(task.assignedBy);
-    const assignedByName = assignedByUser?.name ||
-        (typeof task.assignedBy === 'string' ? task.assignedBy.split('@')[0] || 'User' : 'Unknown');
-    const assignedByEmail = assignedByUser?.email ||
-        (typeof task.assignedBy === 'string' ? task.assignedBy : 'Unknown');
+    // Get Assigned By Name (assignedBy can be string | UserType | undefined)
+    let assignedByName = 'Unknown';
+    let assignedByEmail = 'Unknown';
+
+    if (task.assignedBy) {
+        if (typeof task.assignedBy === 'object') {
+            assignedByName = task.assignedBy.name || 'User';
+            assignedByEmail = task.assignedBy.email;
+        } else {
+            const user = getUserById(task.assignedBy);
+            if (user) {
+                assignedByName = user.name || user.email.split('@')[0] || 'User';
+                assignedByEmail = user.email;
+            } else {
+                assignedByName = task.assignedBy.split('@')[0] || 'User';
+                assignedByEmail = task.assignedBy;
+            }
+        }
+    }
 
     // ✅ FIXED: Check permissions with null checks
     const isCreator = task.assignedBy === safeCurrentUser.email;

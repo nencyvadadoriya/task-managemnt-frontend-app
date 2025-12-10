@@ -18,9 +18,6 @@ import {
   Trash2,
   MoreHorizontal,
   RefreshCcw,
-  ChevronDown,
-  Search,
-  Download,
   Upload,
   AlertTriangle,
   FileText,
@@ -147,16 +144,6 @@ const PRIORITY_ORDER: Record<string, number> = {
   'low': 1,
   '': 0
 };
-
-const SORT_OPTIONS = [
-  { value: 'dueDate', label: 'Due Date' },
-  { value: 'title', label: 'Title' },
-  { value: 'status', label: 'Status' },
-  { value: 'priority', label: 'Priority' },
-  { value: 'createdAt', label: 'Created Date' },
-  { value: 'updatedAt', label: 'Updated Date' },
-  { value: 'assignee', label: 'Assignee' },
-] as const;
 
 // ==================== UTILITY FUNCTIONS ====================
 const getTaskWithDemoData = (task: Task): Task => {
@@ -336,14 +323,12 @@ const validateBulkDraft = (draft: BulkTaskDraft): BulkTaskDraft => {
 // ==================== COMPONENTS ====================
 
 // Task Status Badge Component
-const TaskStatusBadge = memo(({ taskId, tasks, currentUser }: {
+const TaskStatusBadge = memo(({ taskId, tasks }: {
   taskId: string;
   tasks: Task[];
   currentUser: UserType;
 }) => {
   const task = tasks.find(t => t.id === taskId);
-  const isCompleted = task?.status === 'completed';
-  const isPermanentlyApproved = Boolean(task?.completedApproval);
 
   const getStatusInfo = (): TaskStatusInfo => {
     if (!task) {
@@ -1060,7 +1045,6 @@ const MobileTaskItem = memo(({
   isUpdatingApproval,
   openMenuId,
   currentUser,
-  users,
   formatDate,
   isOverdue,
   getTaskBorderColor,
@@ -1078,7 +1062,6 @@ const MobileTaskItem = memo(({
   onOpenApprovalModal,
   onDeleteTask,
   onSetOpenMenuId,
-  isTaskAssignee,
   isTaskAssigner,
   isTaskCompleted,
   isTaskPermanentlyApproved,
@@ -1088,7 +1071,6 @@ const MobileTaskItem = memo(({
   const commentCount = getCommentCount(task);
   const isCompleted = isTaskCompleted(task.id);
   const isPermanentlyApproved = isTaskPermanentlyApproved(task.id);
-  const isAssignee = isTaskAssignee(task);
   const isAssigner = isTaskAssigner(task);
   const isAdmin = currentUser?.role === 'admin';
 
@@ -1286,42 +1268,22 @@ const DesktopTaskItem = memo(({
   task,
   isSelected,
   isToggling,
-  isDeleting,
-  isApproving,
-  isUpdatingApproval,
-  openMenuId,
   currentUser,
-  users,
   formatDate,
   isOverdue,
   getTaskBorderColor,
   getTaskStatusIcon,
-  getStatusBadgeColor,
-  getStatusText,
   getUserInfoForDisplay,
   getCommentCount,
   onSelectTask,
   onToggleStatus,
   onEditTask,
   onOpenCommentSidebar,
-  onOpenReassignModal,
-  onPermanentApproval,
-  onOpenApprovalModal,
-  onDeleteTask,
-  onSetOpenMenuId,
-  isTaskAssignee,
-  isTaskAssigner,
   isTaskCompleted,
-  isTaskPermanentlyApproved,
-  isTaskPendingApproval
 }: any) => {
   const userInfo = getUserInfoForDisplay(task);
   const commentCount = getCommentCount(task);
   const isCompleted = isTaskCompleted(task.id);
-  const isPermanentlyApproved = isTaskPermanentlyApproved(task.id);
-  const isAssignee = isTaskAssignee(task);
-  const isAssigner = isTaskAssigner(task);
-  const isAdmin = currentUser?.role === 'admin';
 
   return (
     <div className={`bg-white rounded-lg border ${getTaskBorderColor(task)} transition-all duration-200 hover:shadow-md`}>
@@ -1465,17 +1427,11 @@ const CommentSidebar = memo(({
   commentLoading,
   deletingCommentId,
   loadingComments,
-  taskComments,
-  taskHistory,
   loadingHistory,
-  commentViewMode,
   currentUser,
-  users,
   formatDate,
   isOverdue,
-  formatCommentTime,
   onCloseSidebar,
-  onSetCommentViewMode,
   onSetNewComment,
   onSaveComment,
   onDeleteComment,
@@ -1897,8 +1853,9 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
   onBulkCreateTasks
 }) => {
   // State
-  const [sortBy, setSortBy] = useState<'title' | 'dueDate' | 'status' | 'priority' | 'createdAt' | 'updatedAt' | 'assignee'>('dueDate');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy] = useState<'title' | 'dueDate' | 'status' | 'priority' | 'createdAt' | 'updatedAt' | 'assignee'>('dueDate');
+  const [sortOrder] = useState<'asc' | 'desc'>('asc');
+
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [deletingTasks, setDeletingTasks] = useState<string[]>([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -1907,14 +1864,12 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
   const [updatingApproval, setUpdatingApproval] = useState<string[]>([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-  // Filter states
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [tagFilter, setTagFilter] = useState('all');
-  const [createdDateFilter, setCreatedDateFilter] = useState('all');
-  const [projectFilter, setProjectFilter] = useState('all');
-
-  // Advanced filters state
+  // Minimal filter state setters used by legacy helper functions
+  const [, setPriorityFilter] = useState('all');
+  const [, setCategoryFilter] = useState('all');
+  const [, setTagFilter] = useState('all');
+  const [, setCreatedDateFilter] = useState('all');
+  const [, setProjectFilter] = useState('all');
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({
     status: 'all',
     priority: 'all',
@@ -1965,7 +1920,6 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkCreateSummary, setBulkCreateSummary] = useState<BulkCreateResult | null>(null);
 
-  const isAdmin = currentUser?.role === 'admin';
 
   // ==================== UTILITY FUNCTIONS ====================
   const getEmailByIdInternal = useCallback((userId: any): string => {
@@ -2430,8 +2384,9 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
     }
   }, [onFetchTaskHistory]);
 
-  const addHistoryRecord = useCallback(async (taskId: string, action: string, description: string) => {
+  const addHistoryRecord = useCallback(async (taskId: string, action: TaskHistory['action'], description: string) => {
     const historyPayload: Omit<TaskHistory, 'id' | 'timestamp'> = {
+      taskId,
       action,
       description,
       userId: currentUser.id,
@@ -2713,10 +2668,12 @@ const handleOpenCommentSidebar = useCallback(async (task: Task) => {
       return;
     }
 
-    const optimisticComment = {
+    const optimisticComment: CommentType = {
       id: `optimistic-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      taskId: selectedTask.id,
       content: newComment,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       userId: currentUser.id,
       userName: currentUser.name,
       userEmail: currentUser.email,
@@ -2903,53 +2860,6 @@ const handleOpenCommentSidebar = useCallback(async (task: Task) => {
       setReassignLoading(false);
     }
   }, [reassignTask, newAssigneeId, onReassignTask, users, addHistoryRecord, getEmailByIdInternal, currentUser, handleCloseReassignModal]);
-
-  // ==================== BULK CREATE FUNCTION ====================
-  const handleBulkCreateTasks = useCallback(async (tasks: BulkTaskPayload[]): Promise<BulkCreateResult> => {
-    // This is a mock implementation. You should replace this with your actual API call
-    const created: Task[] = [];
-    const failures: BulkCreateFailure[] = [];
-
-    for (const [index, taskData] of tasks.entries()) {
-      try {
-        // Mock task creation - Replace with actual API call
-        const newTask: Task = {
-          id: `task-${Date.now()}-${index}`,
-          title: taskData.title,
-          description: taskData.description || '',
-          assignedTo: taskData.assignedTo,
-          dueDate: taskData.dueDate,
-          priority: taskData.priority,
-          taskType: taskData.taskType || 'regular',
-          companyName: taskData.companyName || 'ACS',
-          brand: taskData.brand || 'chips',
-          status: 'pending',
-          assignedBy: currentUser.email,
-          assignedToUser: users.find(u => u.email === taskData.assignedTo) || {
-            id: 'unknown',
-            name: taskData.assignedTo.split('@')[0],
-            email: taskData.assignedTo,
-            role: 'user'
-          },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          completedApproval: false
-        };
-
-        created.push(newTask);
-        toast.success(`Task "${taskData.title}" created successfully`);
-      } catch (error: any) {
-        failures.push({
-          index,
-          rowNumber: taskData.rowNumber,
-          title: taskData.title,
-          reason: error.message || 'Unknown error'
-        });
-      }
-    }
-
-    return { created, failures };
-  }, [currentUser, users]);
 
   // ==================== FILTERED TASKS ====================
   const filteredTasks = useMemo(() => {

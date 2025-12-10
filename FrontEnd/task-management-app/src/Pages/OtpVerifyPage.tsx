@@ -10,7 +10,7 @@ export default function OtpPage() {
     const [email, setEmail] = useState<string>("");
     const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
     const [timer, setTimer] = useState<number>(120);
-    const [error, setError] = useState<string>("");
+    const [, setError] = useState<string>("");
     const [loader, setLoader] = useState<boolean>(false)
 
     const inputRefs = useRef<HTMLInputElement[]>([]);

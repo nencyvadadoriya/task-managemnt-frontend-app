@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router";
 import { useState, useEffect } from "react";
-import type { LoginBody, SignupBody } from "../Types/Types";
+import type { LoginBody, SignupBody, RegisterUserBody } from "../Types/Types";
+
 import toast from "react-hot-toast";
 import { authService } from "../Services/User.Services";
 import { routepath } from "../Routes/route";
@@ -195,11 +196,11 @@ export default function AuthPage() {
   setLoader(true);
 
   try {
-    // Send ONLY the fields defined in SignupBody interface
-    const signupPayload = {
+    const signupPayload: RegisterUserBody = {
       name: signupData.name.trim(),
       email: signupData.email.trim(),
-      password: signupData.password.trim()
+      password: signupData.password.trim(),
+      role: 'user',
     };
 
     const data = await authService.registerUser(signupPayload);

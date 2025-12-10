@@ -1,5 +1,5 @@
-export type TaskStatus =  'in-progress' | 'completed' | 'pending';
-export type TaskPriority = 'low' | 'medium' | 'high';
+export type TaskStatus =  'in-progress' | 'completed' | 'pending' | 'cancelled' | 'on-hold';
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 // Types/Types.ts file mein Task interface mein add karein:
 export interface Task {
@@ -7,8 +7,8 @@ export interface Task {
   title: string;
   description?: string;
   dueDate: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'cancelled' | 'on-hold';
-  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  status: TaskStatus;
+  priority?: TaskPriority;
   assignedTo: string | UserType;
   assignedBy?: string | UserType;
   createdAt: string;
@@ -24,8 +24,13 @@ export interface Task {
   brand?: string;         // 'chips', 'soy', 'saffola', etc.
   project?: string;       // Project name
   assignedToUser?: UserType;
-}
 
+  // Extended fields used in multiple UI components
+  taskType?: string;      // e.g. 'regular', 'bug', etc.
+  companyName?: string;   // Friendly company display name
+  completionType?: 'admin' | 'user';
+  completedBy?: string;
+}
 export interface TaskHistory {
   id: string;
   taskId: string;
@@ -69,6 +74,7 @@ export interface TaskHistory {
   userId: string;
   userName: string;
   userEmail: string;
+  userRole?: string;
   oldValue?: string;
   newValue?: string;
   description?: string;
@@ -84,6 +90,7 @@ export interface CommentType {
     userId: string;
     userName: string;
     userEmail: string;
+    userRole?: string;
     content: string;
     createdAt: string;
     updatedAt: string;
@@ -102,6 +109,9 @@ export interface UserType {
     bio?: string;
     skills?: string[];
     isActive?: boolean;
+
+    // Optional avatar / initial used in some views
+    avatar?: string;
 
     // Task statistics
     assignedTasks?: number;

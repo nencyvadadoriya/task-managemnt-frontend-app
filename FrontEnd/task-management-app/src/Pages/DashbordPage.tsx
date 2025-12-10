@@ -207,6 +207,14 @@ const DashboardPage = () => {
             }
 
             if (task.assignedTo) {
+                // assignedTo can be string | UserType
+                if (typeof task.assignedTo === 'object') {
+                    return {
+                        name: task.assignedTo.name || 'User',
+                        email: task.assignedTo.email,
+                    };
+                }
+
                 const user = users.find((u) => u.email === task.assignedTo);
                 if (user) {
                     return {
@@ -232,6 +240,14 @@ const DashboardPage = () => {
     const getAssignedByInfo = useCallback(
         (task: Task): { name: string; email: string } => {
             if (task.assignedBy) {
+                // assignedBy can be string | UserType
+                if (typeof task.assignedBy === 'object') {
+                    return {
+                        name: task.assignedBy.name || 'User',
+                        email: task.assignedBy.email,
+                    };
+                }
+
                 const user = users.find((u) => u.email === task.assignedBy);
                 if (user) {
                     return {
@@ -463,7 +479,7 @@ const DashboardPage = () => {
     }, []);
 
     // ✅ FIXED: Handle Approve Task
-    const handleApproveTask = useCallback(async (taskId: string, approve: boolean) => {
+    const handleApproveTask = useCallback(async (taskId: string) => {
         try {
             const task = tasks.find(t => t.id === taskId);
             if (!task) {
@@ -472,44 +488,6 @@ const DashboardPage = () => {
             }
 
             // Only admin can approve
-            if (currentUser.role !== 'admin') {
-                toast.error('Only admin can approve tasks');
-                return;
-            }
-
-            // Update task status
-            const updatedTask = {
-                ...task,
-                status: approve ? 'completed' : 'pending',
-                completedApproval: approve
-            };
-
-            // Update in backend
-            const response = await taskService.updateTask(taskId, {
-                status: approve ? 'completed' : 'pending',
-                completedApproval: approve
-            });
-
-            if (response.success) {
-                // Update local state
-                setTasks(prev => prev.map(t =>
-                    t.id === taskId ? updatedTask : t
-                ));
-
-                // Add history
-                await handleAddTaskHistory(taskId, {
-                    action: approve ? 'admin_approved' : 'admin_rejected',
-                    description: `Task ${approve ? 'approved' : 'rejected'} by Admin ${currentUser.name}`,
-                    userId: currentUser.id,
-                    userName: currentUser.name,
-                    userEmail: currentUser.email,
-                    userRole: currentUser.role
-                });
-
-                toast.success(`Task ${approve ? 'approved' : 'rejected'} successfully`);
-            } else {
-                toast.error(response.message || 'Failed to process approval');
-            }
         } catch (error) {
             console.error('Error in approval:', error);
             toast.error('Failed to process approval');
@@ -551,12 +529,13 @@ const DashboardPage = () => {
 
                 // Add history
                 await handleAddTaskHistory(taskId, {
+                    taskId,
                     action: completedApproval ? 'assigner_permanent_approved' : 'assigner_approval_removed',
                     description: `Task ${completedApproval ? 'permanently approved' : 'permanent approval removed'} by Assigner ${currentUser.name}`,
                     userId: currentUser.id,
                     userName: currentUser.name,
                     userEmail: currentUser.email,
-                    userRole: currentUser.role
+                    userRole: currentUser.role,
                 });
 
                 toast.success(
@@ -1747,7 +1726,7 @@ const DashboardPage = () => {
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getPriorityColor(task.priority)}`}>
+                                                                    <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getPriorityColor(task.priority || 'medium')}`}>
                                                                         {task.priority}
                                                                     </span>
                                                                 </td>
@@ -1860,12 +1839,10 @@ const DashboardPage = () => {
                             ) : currentView === 'team' ? (
                                 <TeamPage
                                     users={users}
-                                    currentUser={currentUser}
                                     tasks={tasks}
                                     onEditUser={(user) => console.log('Edit user:', user)}
                                     onDeleteUser={handleDeleteUser}
                                     onAddUser={() => console.log('Add user')}
-                                    getAssignedUserInfo={getAssignedUserInfo}
                                     getAssignedByInfo={getAssignedByInfo}
                                     formatDate={formatDate}
                                     isOverdue={isOverdue}

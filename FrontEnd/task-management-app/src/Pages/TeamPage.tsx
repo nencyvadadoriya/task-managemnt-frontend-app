@@ -4,34 +4,28 @@ import {
     Edit,
     Trash2,
     Plus,
-    Mail,
-    Phone,
     User,
     Users,
-    Shield,
-    MoreVertical,
-    Eye,
-    EyeOff,
     ChevronDown,
     ChevronUp,
-    Calendar,
     CheckCircle,
     Clock,
     AlertCircle,
     Filter,
-    Building
+    Shield,
+    Mail,
+    MoreVertical,
 } from 'lucide-react';
+
 import type { Task, UserType } from '../Types/Types';
 import toast from 'react-hot-toast';
 
 interface TeamPageProps {
     users: UserType[];
-    currentUser: UserType;
     tasks: Task[];
     onEditUser: (user: UserType) => void;
     onDeleteUser: (userId: string) => Promise<void>;
     onAddUser: () => void;
-    getAssignedUserInfo: (task: Task) => { name: string; email: string };
     getAssignedByInfo: (task: Task) => { name: string; email: string };
     formatDate: (dateString: string) => string;
     isOverdue: (dueDate: string, status: string) => boolean;
@@ -39,16 +33,15 @@ interface TeamPageProps {
 
 const TeamPage: React.FC<TeamPageProps> = ({
     users,
-    currentUser,
     tasks,
     onEditUser,
     onDeleteUser,
     onAddUser,
-    getAssignedUserInfo,
     getAssignedByInfo,
     formatDate,
     isOverdue
 }) => {
+
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -87,12 +80,15 @@ const TeamPage: React.FC<TeamPageProps> = ({
     const getTasksCreatedByUser = useMemo(() => {
         return (userId: string) => {
             return tasks.filter(task => {
+                // assignedBy can be string | UserType
                 if (typeof task.assignedBy === 'string') {
                     return task.assignedBy === userId;
                 }
-                if (task.assignedByUser && task.assignedByUser.id) {
-                    return task.assignedByUser.id === userId;
+
+                if (task.assignedBy && typeof task.assignedBy === 'object' && 'id' in task.assignedBy) {
+                    return task.assignedBy.id === userId;
                 }
+
                 return false;
             });
         };
@@ -102,9 +98,9 @@ const TeamPage: React.FC<TeamPageProps> = ({
     const filteredAndSortedUsers = useMemo(() => {
         let filtered = users.filter(user => {
             const safeUser = getSafeUser(user);
-            
+
             if (filterRole !== 'all' && safeUser.role !== filterRole) return false;
-            
+
             if (searchTerm) {
                 const term = searchTerm.toLowerCase();
                 return (
@@ -113,14 +109,14 @@ const TeamPage: React.FC<TeamPageProps> = ({
                     safeUser.role.toLowerCase().includes(term)
                 );
             }
-            
+
             return true;
         });
 
         filtered.sort((a, b) => {
             const userA = getSafeUser(a);
             const userB = getSafeUser(b);
-            
+
             let comparison = 0;
             switch (sortBy) {
                 case 'name':
@@ -135,7 +131,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                     comparison = tasksA - tasksB;
                     break;
             }
-            
+
             return sortOrder === 'asc' ? comparison : -comparison;
         });
 
@@ -146,7 +142,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
     const getUserStats = (userId: string) => {
         const userTasks = getTasksForUser(userId);
         const createdTasks = getTasksCreatedByUser(userId);
-        
+
         const totalTasks = userTasks.length;
         const completedTasks = userTasks.filter(t => t.status === 'completed').length;
         const pendingTasks = userTasks.filter(t => t.status !== 'completed').length;
@@ -180,14 +176,14 @@ const TeamPage: React.FC<TeamPageProps> = ({
     };
 
     // ✅ FIXED: Handle delete user
-    const handleDeleteClick = (userId: string, userName: string) => {
+    const handleDeleteClick = (userId: string) => {
         setUserToDelete(userId);
         setShowDeleteModal(true);
     };
 
     const handleConfirmDelete = async () => {
         if (!userToDelete) return;
-        
+
         setDeletingUserId(userToDelete);
         try {
             await onDeleteUser(userToDelete);
@@ -226,7 +222,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
     const getUserAvatar = (user: UserType): JSX.Element => {
         const safeUser = getSafeUser(user);
         const initials = getUserInitials(safeUser.name);
-        
+
         return (
             <div className="flex-shrink-0">
                 <div className="h-12 w-12 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow">
@@ -239,7 +235,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
     // ✅ FIXED: Get user tasks for display
     const getUserTaskCards = (userId: string) => {
         const userTasks = getTasksForUser(userId);
-        
+
         if (userTasks.length === 0) {
             return (
                 <div className="text-center py-4 text-gray-500 text-sm">
@@ -251,7 +247,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
         return userTasks.slice(0, 5).map(task => {
             const assignedByInfo = getAssignedByInfo(task);
             const isTaskOverdue = isOverdue(task.dueDate, task.status);
-            
+
             return (
                 <div
                     key={task.id}
@@ -267,15 +263,15 @@ const TeamPage: React.FC<TeamPageProps> = ({
                             </p>
                         </div>
                         <span className={`text-xs px-2 py-1 rounded-full ml-2 ${task.status === 'completed'
-                                ? 'bg-green-100 text-green-800'
-                                : task.status === 'in-progress'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-yellow-100 text-yellow-800'
+                            ? 'bg-green-100 text-green-800'
+                            : task.status === 'in-progress'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-yellow-100 text-yellow-800'
                             }`}>
                             {task.status.replace('-', ' ')}
                         </span>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-2 mt-3">
                         <div className="text-xs">
                             <div className="text-gray-500">Due Date</div>
@@ -286,14 +282,14 @@ const TeamPage: React.FC<TeamPageProps> = ({
                         <div className="text-xs">
                             <div className="text-gray-500">Priority</div>
                             <div className={`font-medium ${task.priority === 'high' ? 'text-red-600'
-                                    : task.priority === 'medium' ? 'text-yellow-600'
-                                        : 'text-green-600'
+                                : task.priority === 'medium' ? 'text-yellow-600'
+                                    : 'text-green-600'
                                 }`}>
                                 {task.priority}
                             </div>
                         </div>
                     </div>
-                    
+
                     <div className="mt-2 text-xs text-gray-500">
                         <div className="flex items-center">
                             <User className="h-3 w-3 mr-1" />
@@ -343,7 +339,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                         </div>
                     </div>
                 </div>
-                
+
                 <div className="bg-white rounded-lg shadow p-4">
                     <div className="flex items-center">
                         <div className="flex-shrink-0">
@@ -357,7 +353,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                         </div>
                     </div>
                 </div>
-                
+
                 <div className="bg-white rounded-lg shadow p-4">
                     <div className="flex items-center">
                         <div className="flex-shrink-0">
@@ -371,7 +367,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                         </div>
                     </div>
                 </div>
-                
+
                 <div className="bg-white rounded-lg shadow p-4">
                     <div className="flex items-center">
                         <div className="flex-shrink-0">
@@ -402,7 +398,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                             />
                         </div>
                     </div>
-                    
+
                     <div className="flex items-center space-x-4">
                         <div className="flex items-center space-x-2">
                             <Filter className="h-4 w-4 text-gray-400" />
@@ -419,7 +415,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                 <option value="user">User</option>
                             </select>
                         </div>
-                        
+
                         <div className="flex items-center space-x-2">
                             <select
                                 className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -430,7 +426,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                 <option value="role">Sort by Role</option>
                                 <option value="tasks">Sort by Tasks</option>
                             </select>
-                            
+
                             <button
                                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
                                 className="p-2 border border-gray-300 rounded-md hover:bg-gray-50"
@@ -443,7 +439,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                 )}
                             </button>
                         </div>
-                        
+
                         <div className="flex items-center space-x-2">
                             <button
                                 onClick={() => setViewMode('grid')}
@@ -474,8 +470,8 @@ const TeamPage: React.FC<TeamPageProps> = ({
             </div>
 
             {/* Users Grid/List */}
-            <div className={viewMode === 'grid' 
-                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
+            <div className={viewMode === 'grid'
+                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                 : "space-y-4"
             }>
                 {filteredAndSortedUsers.length === 0 ? (
@@ -493,7 +489,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                         const safeUser = getSafeUser(user);
                         const userStats = getUserStats(safeUser.id);
                         const isExpanded = expandedUserId === safeUser.id;
-                        
+
                         return (
                             <div
                                 key={safeUser.id}
@@ -517,7 +513,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                                 </span>
                                             </div>
                                         </div>
-                                        
+
                                         <div className="flex items-center space-x-1">
                                             <button
                                                 onClick={() => toggleUserDetails(safeUser.id)}
@@ -530,7 +526,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                                     <ChevronDown className="h-5 w-5" />
                                                 )}
                                             </button>
-                                            
+
                                             <div className="relative">
                                                 <button
                                                     className="p-1 text-gray-400 hover:text-gray-600 rounded"
@@ -544,7 +540,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     {/* User Stats */}
                                     <div className="grid grid-cols-2 gap-3 mt-4">
                                         <div className="bg-gray-50 rounded p-2">
@@ -561,7 +557,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 {/* Expanded Details */}
                                 {isExpanded && (
                                     <div className="border-t border-gray-200">
@@ -576,7 +572,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                                     </div>
                                                     <div className="text-xs text-gray-500">Completed</div>
                                                 </div>
-                                                
+
                                                 <div className="text-center">
                                                     <div className={`h-12 w-12 rounded-full flex items-center justify-center mx-auto mb-2 ${userStats.overdueTasks > 0 ? 'bg-red-100' : 'bg-gray-100'}`}>
                                                         <AlertCircle className={`h-6 w-6 ${userStats.overdueTasks > 0 ? 'text-red-600' : 'text-gray-400'}`} />
@@ -587,14 +583,14 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                                     <div className="text-xs text-gray-500">Overdue</div>
                                                 </div>
                                             </div>
-                                            
+
                                             {/* Recent Tasks */}
                                             <div>
                                                 <h4 className="font-medium text-gray-900 mb-2">Recent Tasks</h4>
                                                 <div className="space-y-2">
                                                     {getUserTaskCards(safeUser.id)}
                                                 </div>
-                                                
+
                                                 {userStats.totalTasks > 5 && (
                                                     <div className="mt-3 text-center">
                                                         <button className="text-sm text-blue-600 hover:text-blue-800">
@@ -603,7 +599,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                                     </div>
                                                 )}
                                             </div>
-                                            
+
                                             {/* Actions */}
                                             <div className="flex justify-end space-x-2 mt-4 pt-4 border-t border-gray-200">
                                                 <button
@@ -614,14 +610,14 @@ const TeamPage: React.FC<TeamPageProps> = ({
                                                     Edit
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDeleteClick(safeUser.id, safeUser.name)}
+                                                    onClick={() => handleDeleteClick(safeUser.id)}
                                                     disabled={deletingUserId === safeUser.id}
+
                                                     className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
                                                 >
                                                     {deletingUserId === safeUser.id ? (
                                                         <>
                                                             <span className="animate-spin h-3 w-3 inline mr-1">⏳</span>
-                                                            Deleting...
                                                         </>
                                                     ) : (
                                                         <>
@@ -648,13 +644,13 @@ const TeamPage: React.FC<TeamPageProps> = ({
                         <p className="text-gray-600 mb-4">
                             Are you sure you want to delete this user? This action cannot be undone.
                         </p>
-                        
+
                         <div className="bg-red-50 border border-red-200 rounded p-3 mb-4">
                             <p className="text-sm text-red-800">
                                 <strong>Warning:</strong> All tasks assigned to this user will also be removed.
                             </p>
                         </div>
-                        
+
                         <div className="flex justify-end space-x-3">
                             <button
                                 onClick={handleCancelDelete}

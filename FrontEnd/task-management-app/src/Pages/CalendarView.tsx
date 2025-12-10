@@ -126,13 +126,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           handleSignInChange(auth.isSignedIn.get());
           auth.isSignedIn.listen(handleSignInChange);
         })
-        .catch(error => {
-          console.error('Error initializing Google API client', error);
-          if (isMounted) {
-            setGoogleAuthReady(false);
-            setGoogleError('Unable to initialize Google Calendar sync. Check console for details.');
-          }
-        });
+        .catch((error : any) => {
+            console.error('Error initializing Google API client', error);
+            if (isMounted) {
+              setGoogleAuthReady(false);
+              setGoogleError('Unable to initialize Google Calendar sync. Check console for details.');
+            } 
+          });
     };
 
     setGoogleError(null);
@@ -273,7 +273,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   }
 
   // Get priority color
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = (priority: string | undefined) => {
     switch (priority) {
       case 'high': return 'bg-red-500';
       case 'medium': return 'bg-yellow-500';
@@ -283,7 +283,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   // Get priority text color
-  const getPriorityTextColor = (priority: string) => {
+  const getPriorityTextColor = (priority: string | undefined) => {
     switch (priority) {
       case 'high': return 'text-red-700';
       case 'medium': return 'text-yellow-700';
