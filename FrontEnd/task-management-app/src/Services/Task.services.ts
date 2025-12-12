@@ -19,7 +19,10 @@ const getAuthHeaders = () => {
 
 class TaskService {
     baseUrl = "https://task-managemnt-backend-app.onrender.com/api/task/";
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5a5d8be0442ce657c95604867eccf33ffb52d3cb
     authAddTask = "addTask";
     authGetAllTask = "getAllTasks";
     authSingleTask = "singleTask";
