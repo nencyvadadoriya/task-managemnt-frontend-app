@@ -10,11 +10,11 @@ export default function OtpPage() {
     const [email, setEmail] = useState<string>("");
     const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
     const [timer, setTimer] = useState<number>(120);
-    const [, setError] = useState<string>("");
+    const [error, setError] = useState<string>("");
+
     const [loader, setLoader] = useState<boolean>(false)
 
     const inputRefs = useRef<HTMLInputElement[]>([]);
-
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -72,21 +72,29 @@ export default function OtpPage() {
         inputRefs.current[Math.min(digits.length, 5)]?.focus();
     };
 
-    const handleResend = async(e :any) => {
-         e.preventDefault();
-            try {
-              const  data =  await authService.forgetPassword({email})  
-              if(!data.error){
-                    toast.success(data.msg)
-                    setTimer(120)
-                    setError("")
-              }else{
-                setError(data.msg)
-              }
-            } catch (error) {
-            console.log("somthing went wrong");
-               
+    const handleResend = async (e: any) => {
+        e.preventDefault();
+        try {
+            const data = await authService.forgetPassword({ email });
+
+            if (!data) {
+                setError("No response from server. Please try again.");
+                return;
             }
+
+            if (data.error) {
+                setError(data.msg || "Failed to resend OTP");
+                toast.error(data.msg || "Failed to resend OTP");
+            } else {
+                toast.success(data.msg || "OTP resent successfully!");
+                setTimer(120);
+                setError("");
+            }
+        } catch (error) {
+            console.log("something went wrong", error);
+            setError("Network error. Please try again.");
+            toast.error("Network error. Please try again.");
+        }
     };
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -97,6 +105,7 @@ export default function OtpPage() {
             setError("Please enter a valid 6-digit OTP");
             return;
         }
+
         const payload: OtpverifyPayload = {
             email: email,
             OTP: otpString
@@ -105,23 +114,30 @@ export default function OtpPage() {
             setLoader(true);
             const data = await authService.otpVerify(payload);
 
+            if (!data) {
+                setError("No response from server. Please try again.");
+                toast.error("No response from server. Please try again.");
+                return;
+            }
+
             if (!data.error) {
                 toast.success(data.msg || "OTP verified successfully");
                 navigate(routepath.changePassword, {
                     replace: true,
                     state: { email }
                 });
+                setError("");
             } else {
                 setError(data.msg || "Invalid OTP");
                 toast.error(data.msg || "Invalid OTP");
             }
 
         } catch (error) {
+            setError("Something went wrong. Try again!");
             toast.error("Something went wrong. Try again!");
         }
 
         setLoader(false);
-
     };
 
 
@@ -140,6 +156,12 @@ export default function OtpPage() {
                             <path d="M45 50 L49 54 L55 46" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                     </div>
+
+                    {error && (
+                        <p className="text-red-600 text-sm mt-2 text-center">
+                            {error}
+                        </p>
+                    )}
 
                     <h2 className="text-xl font-bold text-gray-800 mb-2">
                         Verify Your OTP

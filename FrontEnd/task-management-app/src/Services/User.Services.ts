@@ -3,9 +3,9 @@ import type { LoginBody, OtpverifyPayload, RegisterUserBody } from "../Types/Typ
 import toast from "react-hot-toast";
 
 class AuthServices {
-    authBaseUrl = "https://task-managemnt-backend-app.onrender.com/api/";
+    authBaseUrl = "http://localhost:9000/api/";
     authLoginUrl = "auth/login";
-    authRegisterUrl = "auth/register"; // Fixed typo: regigster -> register
+    authRegisterUrl = "auth/register";
     authForgetPassword = "auth/forgetPassword";
     authVerifyOtp = "auth/verifyOtp";
     authChangePassword = "auth/change-password";
@@ -247,27 +247,49 @@ class AuthServices {
 
     async forgetPassword(payload: any) {
         try {
-            const res = await axios.post(this.authBaseUrl + this.authForgetPassword, payload);
+            const url = this.authBaseUrl + this.authForgetPassword;
+            console.log("🔁 ForgetPassword Request:", { url, payload });
+
+            const res = await axios.post(url, payload, {
+                // Prevent infinite loading if server is down/slow
+                timeout: 15000,
+            });
+
+            console.log("✅ ForgetPassword Response:", res.data);
             return res.data;
         } catch (error: any) {
-            toast.error(error.response?.data?.msg || "Something went wrong");
+            console.error("❌ ForgetPassword Error:", error);
+
+            let message = "Something went wrong";
+
+            if (error.code === "ECONNABORTED") {
+                message = "Request timed out. Please try again.";
+            } else if (error.response?.data?.msg) {
+                message = error.response.data.msg;
+            } else if (error.message) {
+                message = error.message;
+            }
+
+            toast.error(message);
+
             return {
                 error: true,
-                msg: error.response?.data?.msg || "Something went wrong",
+                msg: message,
                 status: error.response?.status || 500
             };
         }
     }
 
-    async otpVerify(payload: OtpverifyPayload) {
-        try {
-            const res = await axios.post(this.authBaseUrl + this.authVerifyOtp, payload)
-            return res.data;
-        } catch (error: any) {
-            toast.error(error.response?.data?.msg || "Something went wrong");
-        }
+   async otpVerify(payload: OtpverifyPayload) {
+    try {
+        const res = await axios.post(this.authBaseUrl + this.authVerifyOtp, payload);
+        return res.data; // Success return
+    } catch (error: any) {
+        const message = error.response?.data?.msg || "Verification failed";
+        toast.error(message);
+        return { error: true, msg: message }; // Ye return hona zaroori hai!
     }
-
+}
     async changePassword(payload: { email: string; newPassword: string }) {
         try {
             const res = await axios.post(this.authBaseUrl + this.authChangePassword, payload);
