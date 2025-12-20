@@ -1578,7 +1578,7 @@ const DesktopTaskItem = memo(({
             )}
 
             <button
-              onClick={() => onToggleStatus(task.id, originalTask)}
+              onClick={() => onToggleStatus(task.id, task)}
               disabled={isToggling || (isPermanentlyApproved && isAssignee && !isAssigner)}
               className="flex-shrink-0 p-1 hover:bg-gray-100 rounded mt-0.5"
               title={isCompleted ? 'Mark as pending' : 'Mark as completed'}
