@@ -488,8 +488,8 @@ const EditTaskModal = memo(({
             </button>
             <button
               onClick={onSubmit}
-      disabled={editLoading || !editFormData.title.trim() || !editFormData.assignedTo.trim() || !editFormData.dueDate}
-      className={`px-4 py-2 text-sm font-medium rounded-lg text-white flex items-center gap-2 ${editLoading || !editFormData.title.trim() || !editFormData.assignedTo.trim() || !editFormData.dueDate
+              disabled={editLoading || !editFormData.title.trim() || !editFormData.assignedTo.trim() || !editFormData.dueDate}
+              className={`px-4 py-2 text-sm font-medium rounded-lg text-white flex items-center gap-2 ${editLoading || !editFormData.title.trim() || !editFormData.assignedTo.trim() || !editFormData.dueDate
                 ? 'bg-gray-300 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700'
                 }`}
@@ -2221,7 +2221,7 @@ const ReassignModal = memo(({
 
 ReassignModal.displayName = 'ReassignModal';
 
-// Task History Modal Component - UPDATED WITH CREATOR AND ASSIGNEE INFO
+// Task History Modal Component
 const TaskHistoryModal = memo(({
   showHistoryModal,
   historyTask,
@@ -2229,11 +2229,8 @@ const TaskHistoryModal = memo(({
   loadingHistory,
   loadingComments,
   currentUser,
-  users,
   onClose,
-  formatDate,
-  getEmailByIdInternal,
-  getAssignerEmail
+  formatDate
 }: {
   showHistoryModal: boolean;
   historyTask: Task | null;
@@ -2241,67 +2238,13 @@ const TaskHistoryModal = memo(({
   loadingHistory: boolean;
   loadingComments: boolean;
   currentUser: UserType;
-  users: UserType[];
   onClose: () => void;
   formatDate: (date: string) => string;
-  getEmailByIdInternal?: (userId: any) => string;
-  getAssignerEmail?: (task: Task) => string;
 }) => {
   if (!showHistoryModal || !historyTask) return null;
 
   // Format creation date for display
   const formattedCreatedAt = formatDateTime(historyTask.createdAt || historyTask.updatedAt || new Date().toISOString());
-
-  // Get creator and assignee emails
-  const getCreatorEmail = () => {
-    if (getAssignerEmail) {
-      return getAssignerEmail(historyTask);
-    }
-    
-    // Fallback logic
-    if (!historyTask.assignedBy) return 'Unknown';
-    
-    if (typeof historyTask.assignedBy === 'object' && historyTask.assignedBy !== null) {
-      const assignerObj = historyTask.assignedBy as any;
-      if (assignerObj.email) return assignerObj.email;
-      if (assignerObj.name) return assignerObj.name;
-    }
-    
-    // Try to find in users
-    const creatorUser = users.find(u => 
-      u.id === historyTask.assignedBy ||
-      u._id === historyTask.assignedBy ||
-      u.email === historyTask.assignedBy
-    );
-    
-    return creatorUser?.email || historyTask.assignedBy || 'Unknown';
-  };
-
-  const getAssigneeEmail = () => {
-    if (getEmailByIdInternal) {
-      return getEmailByIdInternal(historyTask.assignedTo);
-    }
-    
-    // Fallback logic
-    const assignedTo = historyTask.assignedTo;
-    if (typeof assignedTo === 'string') {
-      if (assignedTo.includes('@')) {
-        return assignedTo;
-      } else {
-        const user = users.find(u =>
-          u.id === assignedTo ||
-          u._id === assignedTo ||
-          u.email === assignedTo
-        );
-        return user?.email || assignedTo || 'Unknown';
-      }
-    }
-    
-    return 'Unknown';
-  };
-
-  const creatorEmail = getCreatorEmail();
-  const assigneeEmail = getAssigneeEmail();
 
   return (
     <div className="fixed inset-0 z-50">
@@ -2340,9 +2283,9 @@ const TaskHistoryModal = memo(({
               </div>
             </div>
 
-            {/* Task Creation Summary - UPDATED WITH CREATOR AND ASSIGNEE INFO */}
+            {/* Task Creation Summary */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-white border-2 border-blue-300 flex items-center justify-center">
                   <Plus className="h-5 w-5 text-blue-600" />
                 </div>
@@ -2353,42 +2296,7 @@ const TaskHistoryModal = memo(({
                   </p>
                 </div>
               </div>
-              
-              {/* Creator and Assignee Info - NEW SECTION */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div className="bg-white p-3 rounded-lg border border-blue-100">
-                  <div className="flex items-center gap-2 mb-2">
-                    <User className="h-4 w-4 text-blue-500" />
-                    <h5 className="font-medium text-gray-700">Created By</h5>
-                  </div>
-                  <div className="text-sm">
-                    <div className="text-gray-900 font-medium truncate">
-                      {creatorEmail}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Task Creator/Assigner
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white p-3 rounded-lg border border-blue-100">
-                  <div className="flex items-center gap-2 mb-2">
-                    <UserPlus className="h-4 w-4 text-green-500" />
-                    <h5 className="font-medium text-gray-700">Assigned To</h5>
-                  </div>
-                  <div className="text-sm">
-                    <div className="text-gray-900 font-medium truncate">
-                      {assigneeEmail}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Task Assignee
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Task Details */}
-              <div className="grid grid-cols-2 gap-3 text-sm bg-white p-3 rounded-lg border border-blue-100">
+              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <span className="font-medium text-gray-600">Priority:</span>
                   <span className={`ml-2 px-2 py-0.5 rounded text-xs ${historyTask.priority === 'high' ? 'bg-red-100 text-red-800' :
@@ -2401,28 +2309,10 @@ const TaskHistoryModal = memo(({
                   <span className="font-medium text-gray-600">Due Date:</span>
                   <span className="ml-2">{formatDate(historyTask.dueDate)}</span>
                 </div>
-                {historyTask.type && (
-                  <div>
-                    <span className="font-medium text-gray-600">Type:</span>
-                    <span className="ml-2 px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
-                      {historyTask.type}
-                    </span>
-                  </div>
-                )}
-                {historyTask.company && (
-                  <div>
-                    <span className="font-medium text-gray-600">Company:</span>
-                    <span className="ml-2">{historyTask.company}</span>
-                  </div>
-                )}
               </div>
             </div>
 
             {/* History Timeline */}
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Activity Timeline</h3>
-            </div>
-            
             <PermanentHistoryTimeline
               timelineItems={timelineItems}
               loadingHistory={loadingHistory}
@@ -4149,7 +4039,7 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
         onReassign={handleReassignTask}
       />
 
-      {/* Task History Modal - UPDATED WITH NEW PROPS */}
+      {/* Task History Modal */}
       <TaskHistoryModal
         showHistoryModal={showHistoryModal}
         historyTask={historyTask}
@@ -4157,11 +4047,8 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
         loadingHistory={historyTask ? loadingHistory[historyTask.id] : false}
         loadingComments={loadingComments}
         currentUser={currentUser}
-        users={users}
         onClose={handleCloseHistoryModal}
         formatDate={formatDate}
-        getEmailByIdInternal={getEmailByIdInternal}
-        getAssignerEmail={getAssignerEmail}
       />
     </div>
   );
