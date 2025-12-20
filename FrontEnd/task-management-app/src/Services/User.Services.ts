@@ -244,52 +244,45 @@ class AuthServices {
             };
         }
     }
-
+    // अस्थायी समाधान: OTP को response में return करवाएं
     async forgetPassword(payload: any) {
         try {
-            const url = this.authBaseUrl + this.authForgetPassword;
-            console.log("🔁 ForgetPassword Request:", { url, payload });
+            // Add requestId for tracking
+            const requestId = Date.now();
+            console.log(`📨 ForgetPassword Request #${requestId}:`, payload.email);
 
-            const res = await axios.post(url, payload, {
-                // Prevent infinite loading if server is down/slow
-                timeout: 15000,
+            const res = await axios.post(this.authBaseUrl + this.authForgetPassword, payload, {
+                timeout: 30000, // Increase timeout
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-ID': requestId
+                }
             });
 
-            console.log("✅ ForgetPassword Response:", res.data);
-            return res.data;
-        } catch (error: any) {
-            console.error("❌ ForgetPassword Error:", error);
-
-            let message = "Something went wrong";
-
-            if (error.code === "ECONNABORTED") {
-                message = "Request timed out. Please try again.";
-            } else if (error.response?.data?.msg) {
-                message = error.response.data.msg;
-            } else if (error.message) {
-                message = error.message;
+            // IMPORTANT: If email fails, show OTP in response for debugging
+            if (res.data.success && res.data.otp) {
+                console.log("⚠️ DEBUG MODE: OTP is:", res.data.otp);
+                toast.success(`OTP sent! Check email. (DEV: ${res.data.otp})`);
+            } else {
+                console.log("Response received but no OTP:", res.data);
             }
 
-            toast.error(message);
-
-            return {
-                error: true,
-                msg: message,
-                status: error.response?.status || 500
-            };
+            return res.data;
+        } catch (error) {
+            console.error("Full error details:", error);
+            return { error: true, msg: "Failed to send OTP" };
         }
     }
-
-   async otpVerify(payload: OtpverifyPayload) {
-    try {
-        const res = await axios.post(this.authBaseUrl + this.authVerifyOtp, payload);
-        return res.data; // Success return
-    } catch (error: any) {
-        const message = error.response?.data?.msg || "Verification failed";
-        toast.error(message);
-        return { error: true, msg: message }; // Ye return hona zaroori hai!
+    async otpVerify(payload: OtpverifyPayload) {
+        try {
+            const res = await axios.post(this.authBaseUrl + this.authVerifyOtp, payload);
+            return res.data; // Success return
+        } catch (error: any) {
+            const message = error.response?.data?.msg || "Verification failed";
+            toast.error(message);
+            return { error: true, msg: message }; // Ye return hona zaroori hai!
+        }
     }
-}
     async changePassword(payload: { email: string; newPassword: string }) {
         try {
             const res = await axios.post(this.authBaseUrl + this.authChangePassword, payload);
