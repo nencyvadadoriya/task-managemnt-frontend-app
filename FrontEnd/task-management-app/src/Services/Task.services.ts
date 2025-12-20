@@ -18,7 +18,7 @@ const getAuthHeaders = () => {
 };
 
 class TaskService {
-    baseUrl = "https://task-managemnt-backend-app.onrender.com/api/task/";
+    baseUrl = "https://task-managemnt-backend-app.vercel.app/api/task/";
     authAddTask = "addTask";
     authGetAllTask = "getAllTasks";
     authSingleTask = "singleTask";
