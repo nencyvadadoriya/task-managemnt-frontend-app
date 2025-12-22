@@ -96,7 +96,7 @@ interface BulkCreateResult {
 }
 
 interface BulkImportDefaults {
-  assignedTo: string;
+  assigner: string; // Changed from assignedTo to assigner
   dueDate: string;
   priority: BulkPriority;
   taskType: string;
@@ -109,7 +109,7 @@ interface BulkTaskDraft {
   rowNumber: number;
   title: string;
   description: string;
-  assignedTo: string;
+  assigner: string; // Changed from assignedTo to assigner
   dueDate: string;
   priority: BulkPriority | '';
   taskType: string;
@@ -239,10 +239,10 @@ const validateBulkDraft = (draft: BulkTaskDraft): BulkTaskDraft => {
     errors.push('Title is required');
   }
 
-  if (!draft.assignedTo.trim()) {
-    errors.push('Assignee email is required');
-  } else if (!draft.assignedTo.includes('@')) {
-    errors.push('Invalid email format for assignee');
+  if (!draft.assigner.trim()) {
+    errors.push('Assigner email is required');
+  } else if (!draft.assigner.includes('@')) {
+    errors.push('Invalid email format for assigner');
   }
 
   if (!draft.dueDate) {
@@ -260,9 +260,677 @@ const validateBulkDraft = (draft: BulkTaskDraft): BulkTaskDraft => {
   };
 };
 
-// ==================== COMPONENTS ====================
+// ==================== BULK IMPORTER COMPONENT ====================
+const BulkImporter = memo(({
+  draftTasks = [],
+  defaults,
+  users = [],
+  onDefaultsChange,
+  onDraftsChange,
+  onClose,
+  onSubmit,
+  submitting = false,
+  summary = null
+}: {
+  draftTasks?: BulkTaskDraft[];
+  defaults: BulkImportDefaults;
+  users?: UserType[];
+  onDefaultsChange: (defaults: Partial<BulkImportDefaults>) => void;
+  onDraftsChange: (drafts: BulkTaskDraft[]) => void;
+  onClose: () => void;
+  onSubmit: () => Promise<void>;
+  submitting?: boolean;
+  summary?: BulkCreateResult | null;
+}) => {
+  const [bulkTaskInput, setBulkTaskInput] = useState<string>('');
 
-// Edit Task Modal Component
+
+  // Get today's date in YYYY-MM-DD format
+  const today = useMemo(() => {
+    const date = new Date();
+    return date.toISOString().split('T')[0];
+  }, []);
+
+  // Filter brands based on selected company
+  const filteredBrands = useMemo(() => {
+    if (!defaults.companyName || defaults.companyName === 'all') return [];
+    return COMPANY_BRAND_MAP[defaults.companyName] || [];
+  }, [defaults.companyName]);
+
+  const handleFieldChange = useCallback((id: string, field: keyof BulkTaskDraft, value: string) => {
+    onDraftsChange(draftTasks.map(task =>
+      task.id === id ? { ...task, [field]: value, errors: [] } : task
+    ));
+  }, [draftTasks, onDraftsChange]);
+
+  const handleRemoveDraft = useCallback((id: string) => {
+    onDraftsChange(draftTasks.filter(task => task.id !== id));
+  }, [draftTasks, onDraftsChange]);
+
+
+  const handleParseBulkInput = useCallback(() => {
+    if (!bulkTaskInput.trim()) {
+      toast.error('Please enter task titles');
+      return;
+    }
+
+    // Validate due date if provided
+    if (defaults.dueDate && defaults.dueDate < today) {
+      toast.error('Due date cannot be in the past');
+      return;
+    }
+
+    const taskTitles = bulkTaskInput.trim().split('\n')
+      .map(title => title.trim())
+      .filter(title => title.length > 0);
+
+    if (taskTitles.length === 0) {
+      toast.error('No valid tasks found');
+      return;
+    }
+
+    const newDrafts: BulkTaskDraft[] = taskTitles.map((title, index) => {
+      const draftId = `draft-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${index}`;
+      const errors: string[] = [];
+
+      if (!title.trim()) {
+        errors.push('Task title is required');
+      }
+
+      // Validate due date for each task
+      if (defaults.dueDate && defaults.dueDate < today) {
+        errors.push('Due date cannot be in the past');
+      }
+
+      return {
+        id: draftId,
+        rowNumber: draftTasks.length + index + 1,
+        title,
+        description: '',
+        assigner: defaults.assigner,
+        dueDate: defaults.dueDate,
+        priority: defaults.priority,
+        taskType: defaults.taskType,
+        companyName: defaults.companyName,
+        brand: defaults.brand,
+        errors
+      };
+    });
+
+    // Add new tasks at the TOP of existing tasks
+    onDraftsChange([...newDrafts, ...draftTasks]);
+    setBulkTaskInput('');
+    toast.success(`✅ ${taskTitles.length} tasks added successfully`);
+  }, [bulkTaskInput, defaults, draftTasks, onDraftsChange, today]);
+
+  // Handle company change - reset brand when company changes
+  const handleCompanyChange = useCallback((companyName: string) => {
+    onDefaultsChange({
+      companyName: companyName,
+      brand: '' // Reset brand when company changes
+    });
+  }, [onDefaultsChange]);
+
+  // Apply default assigner to all tasks
+  const handleApplyAssignerToAll = useCallback(() => {
+    if (!defaults.assigner) {
+      toast.error('Please select an assigner first');
+      return;
+    }
+
+    onDraftsChange(draftTasks.map(task => ({
+      ...task,
+      assigner: defaults.assigner
+    })));
+
+    toast.success(`✅ Assigner applied to all ${draftTasks.length} tasks`);
+  }, [defaults.assigner, draftTasks, onDraftsChange]);
+
+  // Apply default company to all tasks
+  const handleApplyCompanyToAll = useCallback(() => {
+    if (!defaults.companyName) {
+      toast.error('Please select a company first');
+      return;
+    }
+
+    onDraftsChange(draftTasks.map(task => ({
+      ...task,
+      companyName: defaults.companyName
+    })));
+
+    toast.success(`✅ Company applied to all ${draftTasks.length} tasks`);
+  }, [defaults.companyName, draftTasks, onDraftsChange]);
+
+  // Apply default brand to all tasks
+  const handleApplyBrandToAll = useCallback(() => {
+    if (!defaults.brand) {
+      toast.error('Please select a brand first');
+      return;
+    }
+
+    onDraftsChange(draftTasks.map(task => ({
+      ...task,
+      brand: defaults.brand
+    })));
+
+    toast.success(`✅ Brand applied to all ${draftTasks.length} tasks`);
+  }, [defaults.brand, draftTasks, onDraftsChange]);
+
+  // Apply default due date to all tasks
+  const handleApplyDueDateToAll = useCallback(() => {
+    if (!defaults.dueDate) {
+      toast.error('Please select a due date first');
+      return;
+    }
+
+    // Validate due date is not in past
+    if (defaults.dueDate < today) {
+      toast.error('Due date cannot be in the past');
+      return;
+    }
+
+    onDraftsChange(draftTasks.map(task => ({
+      ...task,
+      dueDate: defaults.dueDate
+    })));
+
+    toast.success(`✅ Due date applied to all ${draftTasks.length} tasks`);
+  }, [defaults.dueDate, draftTasks, onDraftsChange, today]);
+
+  // Apply default priority to all tasks
+  const handleApplyPriorityToAll = useCallback(() => {
+    if (!defaults.priority) {
+      toast.error('Please select a priority first');
+      return;
+    }
+
+    onDraftsChange(draftTasks.map(task => ({
+      ...task,
+      priority: defaults.priority
+    })));
+
+    toast.success(`✅ Priority applied to all ${draftTasks.length} tasks`);
+  }, [defaults.priority, draftTasks, onDraftsChange]);
+
+  // Handle due date change with validation
+  const handleDueDateChange = useCallback((date: string) => {
+    if (date && date < today) {
+      toast.error('Due date cannot be in the past');
+      // Reset to empty or keep current value
+      onDefaultsChange({ dueDate: '' });
+    } else {
+      onDefaultsChange({ dueDate: date });
+    }
+  }, [onDefaultsChange, today]);
+
+  const errorCount = draftTasks.reduce((count, task) => count + task.errors.length, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">Bulk Task Creator</h2>
+            <p className="text-sm text-gray-500 mt-1">Add tasks with selected filters</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 text-gray-500">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Top Controls - All Dropdowns */}
+        <div className="px-6 py-4 border-b bg-gray-50">
+
+          {/* Filter Dropdowns Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
+            {/* Default Assigner */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-gray-700">Assigner *</label>
+                <button
+                  onClick={handleApplyAssignerToAll}
+                  disabled={!defaults.assigner || draftTasks.length === 0}
+                  className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                >
+                  Apply to all
+                </button>
+              </div>
+              <select
+                value={defaults.assigner}
+                onChange={(e) => onDefaultsChange({ assigner: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">Select assigner</option>
+                {users.map(user => (
+                  <option key={user.id || user.email} value={user.email}>
+                    {user.name} ({user.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Default Company */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-gray-700">Company *</label>
+                <button
+                  onClick={handleApplyCompanyToAll}
+                  disabled={!defaults.companyName || draftTasks.length === 0}
+                  className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                >
+                  Apply to all
+                </button>
+              </div>
+              <select
+                value={defaults.companyName}
+                onChange={(e) => handleCompanyChange(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">Select company</option>
+                {Object.keys(COMPANY_BRAND_MAP).map(company => (
+                  <option key={company} value={company}>
+                    {company.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Default Brand (filtered by company) */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-gray-700">Brand</label>
+                <button
+                  onClick={handleApplyBrandToAll}
+                  disabled={!defaults.brand || !defaults.companyName || draftTasks.length === 0}
+                  className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                >
+                  Apply to all
+                </button>
+              </div>
+              <select
+                value={defaults.brand}
+                onChange={(e) => onDefaultsChange({ brand: e.target.value })}
+                disabled={!defaults.companyName}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${!defaults.companyName ? 'bg-gray-100 text-gray-500' : ''}`}
+              >
+                <option value="">Select brand</option>
+                {filteredBrands.map(brand => (
+                  <option key={brand} value={brand}>
+                    {brand.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Default Due Date */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-gray-700">Due Date</label>
+                <button
+                  onClick={handleApplyDueDateToAll}
+                  disabled={!defaults.dueDate || draftTasks.length === 0}
+                  className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                >
+                  Apply to all
+                </button>
+              </div>
+              <input
+                type="date"
+                value={defaults.dueDate}
+                onChange={(e) => handleDueDateChange(e.target.value)}
+                min={today}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+
+            </div>
+
+            {/* Default Priority */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-gray-700">Priority</label>
+                <button
+                  onClick={handleApplyPriorityToAll}
+                  disabled={!defaults.priority || draftTasks.length === 0}
+                  className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                >
+                  Apply to all
+                </button>
+              </div>
+              <select
+                value={defaults.priority}
+                onChange={(e) => onDefaultsChange({ priority: e.target.value as BulkPriority })}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">Select priority</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Bulk Input Section */}
+          <div className="mt-4 pt-4 ">
+            <div className="flex items-center justify-between mb-3">
+
+            </div>
+            <div className="flex gap-3">
+              <textarea
+                value={bulkTaskInput}
+                onChange={(e) => setBulkTaskInput(e.target.value)}
+                placeholder="Enter multiple task titles (one per line):
+Fix login issue
+Update documentation
+Test mobile responsiveness
+Add user notifications
+..."
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-h-[80px]"
+                rows={3}
+              />
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleParseBulkInput}
+                  disabled={!bulkTaskInput.trim() || !defaults.assigner || !defaults.companyName}
+                  className={`px-6 py-3 rounded-lg font-medium ${!bulkTaskInput.trim() || !defaults.assigner || !defaults.companyName
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
+                >
+                  Add Bulk Tasks
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tasks Table */}
+        <div className="flex-1 overflow-auto px-6 py-4">
+          {draftTasks.length === 0 ? (
+            <div className="text-center py-12">
+              <FileText className="h-16 w-16 mx-auto text-gray-300 mb-4" />
+              <h3 className="text-lg font-medium text-gray-700 mb-2">No tasks added yet</h3>
+              <p className="text-gray-500 text-sm">Use the form above to add tasks individually or in bulk</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="font-medium text-gray-700">{draftTasks.length} task(s) to create</span>
+                  {errorCount > 0 && (
+                    <span className="inline-flex items-center gap-1 text-xs text-red-600 bg-red-50 px-2 py-1 rounded-full">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errorCount} error(s) need fixing
+                    </span>
+                  )}
+                  {summary && summary.failures.length > 0 && (
+                    <span className="inline-flex items-center gap-2 text-xs text-yellow-700 bg-yellow-50 px-3 py-1 rounded-full">
+                      <AlertTriangle className="h-3 w-3" />
+                      {summary.failures.length} failed to create
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => navigator.clipboard.writeText(draftTasks.map(d => d.title).join('\n'))}
+                    className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100"
+                  >
+                    Copy All Titles
+                  </button>
+                  <button
+                    onClick={() => onDraftsChange([])}
+                    className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+
+              {/* Tasks Table - New tasks appear at TOP */}
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr className="text-xs uppercase tracking-wide text-gray-500">
+                      <th className="px-4 py-3 text-left w-16">#</th>
+                      <th className="px-4 py-3 text-left">Task Title *</th>
+                      <th className="px-4 py-3 text-left w-56">Assigner *</th>
+                      <th className="px-4 py-3 text-left w-56">Company & Brand</th>
+                      <th className="px-4 py-3 text-left w-40">Due Date</th>
+                      <th className="px-4 py-3 text-left w-32">Priority</th>
+                      <th className="px-4 py-3 text-left w-20">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {draftTasks.map((draft, index) => {
+                      // Get brands for this draft's company
+                      const draftCompanyBrands = draft.companyName && draft.companyName !== 'all'
+                        ? COMPANY_BRAND_MAP[draft.companyName] || []
+                        : [];
+
+                      return (
+                        <tr key={draft.id} className={draft.errors.length ? 'bg-red-50/30' : 'hover:bg-gray-50'}>
+                          {/* Index - Show sequential number (latest first) */}
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-gray-500 font-medium">#{index + 1}</div>
+                          </td>
+
+                          {/* Task Title */}
+                          <td className="px-4 py-3">
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                value={draft.title}
+                                onChange={(e) => handleFieldChange(draft.id, 'title', e.target.value)}
+                                className={`w-full px-3 py-2 border ${draft.errors.some(e => e.includes('Title')) ? 'border-red-300' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
+                                placeholder="Enter task title"
+                              />
+                            </div>
+                            {draft.errors.some(e => e.includes('Title')) && (
+                              <p className="text-xs text-red-600 mt-1">Task title is required</p>
+                            )}
+                          </td>
+
+                          {/* Assigner */}
+                          <td className="px-4 py-3">
+                            <select
+                              value={draft.assigner}
+                              onChange={(e) => handleFieldChange(draft.id, 'assigner', e.target.value)}
+                              className={`w-full px-3 py-2 border ${draft.errors.some(e => e.includes('Assigner') || e.includes('email')) ? 'border-red-300' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white`}
+                            >
+                              <option value="">Select assigner</option>
+                              {users.map(user => (
+                                <option key={user.id || user.email} value={user.email}>
+                                  {user.name} ({user.email})
+                                </option>
+                              ))}
+                            </select>
+                            {draft.errors.some(e => e.includes('Assigner') || e.includes('email')) && (
+                              <p className="text-xs text-red-600 mt-1">Please select a valid assigner</p>
+                            )}
+                          </td>
+
+                          {/* Company & Brand */}
+                          <td className="px-4 py-3">
+                            <div className="space-y-2">
+                              {/* Company Dropdown */}
+                              <select
+                                value={draft.companyName}
+                                onChange={(e) => {
+                                  handleFieldChange(draft.id, 'companyName', e.target.value);
+                                  handleFieldChange(draft.id, 'brand', '');
+                                }}
+                                className={`w-full px-3 py-2 border ${draft.errors.some(e => e.includes('Company')) ? 'border-red-300' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
+                              >
+                                <option value="">Select company</option>
+                                {Object.keys(COMPANY_BRAND_MAP).map(company => (
+                                  <option key={company} value={company}>
+                                    {company.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                                  </option>
+                                ))}
+                              </select>
+
+                              {/* Brand Dropdown */}
+                              <select
+                                value={draft.brand}
+                                onChange={(e) => handleFieldChange(draft.id, 'brand', e.target.value)}
+                                disabled={!draft.companyName || draft.companyName === 'all'}
+                                className={`w-full px-3 py-2 border ${draft.errors.some(e => e.includes('Brand')) ? 'border-red-300' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${!draft.companyName || draft.companyName === 'all' ? 'bg-gray-100 text-gray-500' : ''}`}
+                              >
+                                <option value="">Select brand</option>
+                                {draftCompanyBrands.map(brand => (
+                                  <option key={brand} value={brand}>
+                                    {brand.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            {draft.errors.some(e => e.includes('Company')) && (
+                              <p className="text-xs text-red-600 mt-1">Please select a company</p>
+                            )}
+                          </td>
+
+                          {/* Due Date */}
+                          <td className="px-4 py-3">
+                            <input
+                              type="date"
+                              value={draft.dueDate}
+                              onChange={(e) => {
+                                const newDate = e.target.value;
+                                if (newDate && newDate < today) {
+                                  toast.error('Due date cannot be in the past');
+                                } else {
+                                  handleFieldChange(draft.id, 'dueDate', newDate);
+                                }
+                              }}
+                              min={today}
+                              className={`w-full px-3 py-2 border ${draft.errors.some(e => e.includes('date')) ? 'border-red-300' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
+                            />
+                            {draft.errors.some(e => e.includes('date')) && (
+                              <p className="text-xs text-red-600 mt-1">Please select a valid date</p>
+                            )}
+                            {draft.dueDate && draft.dueDate < today && (
+                              <p className="text-xs text-red-600 mt-1">Date cannot be in past</p>
+                            )}
+                          </td>
+
+                          {/* Priority */}
+                          <td className="px-4 py-3">
+                            <select
+                              value={draft.priority}
+                              onChange={(e) => handleFieldChange(draft.id, 'priority', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            >
+                              <option value="">Select priority</option>
+                              <option value="low">Low</option>
+                              <option value="medium">Medium</option>
+                              <option value="high">High</option>
+                              <option value="urgent">Urgent</option>
+                            </select>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => handleRemoveDraft(draft.id)}
+                              className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              title="Remove task"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Errors Summary */}
+              {draftTasks.some(draft => draft.errors.length > 0) && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-red-700 font-medium mb-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    Please fix the following errors before creating tasks:
+                  </div>
+                  <div className="space-y-2">
+                    {draftTasks.map(draft =>
+                      draft.errors.map((error, idx) => (
+                        <div key={`${draft.id}-error-${idx}`} className="text-sm text-red-600">
+                          <span className="font-medium">Row #{draft.rowNumber}:</span> {error}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Previous Summary (if any) */}
+              {summary && summary.failures.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-yellow-800 font-medium mb-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    Previous run had {summary.failures.length} failure(s)
+                  </div>
+                  <ul className="list-disc ml-5 text-sm text-yellow-700 space-y-1">
+                    {summary.failures.map(failure => (
+                      <li key={failure.index}>
+                        Row #{failure.rowNumber} - "{failure.title}" → {failure.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t bg-white flex items-center justify-between">
+          <div className="text-sm text-gray-500">
+            {draftTasks.length === 0
+              ? 'Add tasks using the form above'
+              : `Ready to create ${draftTasks.length} task(s)`}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onSubmit}
+              disabled={draftTasks.length === 0 || submitting || errorCount > 0}
+              className={`px-6 py-2 text-sm font-medium rounded-lg text-white transition-colors flex items-center gap-2 ${draftTasks.length === 0 || errorCount > 0
+                ? 'bg-gray-300 cursor-not-allowed'
+                : submitting
+                  ? 'bg-blue-400'
+                  : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating Tasks...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" />
+                  Create {draftTasks.length} Task{draftTasks.length !== 1 ? 's' : ''}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+BulkImporter.displayName = 'BulkImporter';
+
+// ==================== EDIT TASK MODAL ====================
 const EditTaskModal = memo(({
   showEditModal,
   editingTask,
@@ -488,8 +1156,8 @@ const EditTaskModal = memo(({
             </button>
             <button
               onClick={onSubmit}
-      disabled={editLoading || !editFormData.title.trim() || !editFormData.assignedTo.trim() || !editFormData.dueDate}
-      className={`px-4 py-2 text-sm font-medium rounded-lg text-white flex items-center gap-2 ${editLoading || !editFormData.title.trim() || !editFormData.assignedTo.trim() || !editFormData.dueDate
+              disabled={editLoading || !editFormData.title.trim() || !editFormData.assignedTo.trim() || !editFormData.dueDate}
+              className={`px-4 py-2 text-sm font-medium rounded-lg text-white flex items-center gap-2 ${editLoading || !editFormData.title.trim() || !editFormData.assignedTo.trim() || !editFormData.dueDate
                 ? 'bg-gray-300 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700'
                 }`}
@@ -515,8 +1183,8 @@ const EditTaskModal = memo(({
 
 EditTaskModal.displayName = 'EditTaskModal';
 
-// Task Status Badge Component
-const TaskStatusBadge = memo(({ taskId, tasks, }: {
+// ==================== TASK STATUS BADGE ====================
+const TaskStatusBadge = memo(({ taskId, tasks }: {
   taskId: string;
   tasks: Task[];
   currentUser: UserType;
@@ -597,7 +1265,7 @@ const TaskStatusBadge = memo(({ taskId, tasks, }: {
 
 TaskStatusBadge.displayName = 'TaskStatusBadge';
 
-// Task Filters Component
+// ==================== TASK FILTERS ====================
 const TaskFilters = memo(({
   advancedFilters,
   availableBrands,
@@ -803,428 +1471,7 @@ const TaskFilters = memo(({
 
 TaskFilters.displayName = 'TaskFilters';
 
-// Bulk Importer Component
-const BulkImporter = memo(({
-  draftTasks,
-  defaults,
-  users,
-  onDefaultsChange,
-  onDraftsChange,
-  onClose,
-  onSubmit,
-  submitting,
-  summary
-}: {
-  draftTasks: BulkTaskDraft[];
-  defaults: BulkImportDefaults;
-  users: UserType[];
-  onDefaultsChange: (defaults: Partial<BulkImportDefaults>) => void;
-  onDraftsChange: (drafts: BulkTaskDraft[]) => void;
-  onClose: () => void;
-  onSubmit: () => Promise<void>;
-  submitting: boolean;
-  summary: BulkCreateResult | null;
-}) => {
-  const [bulkTaskInput, setBulkTaskInput] = useState<string>('');
-
-  const handleFieldChange = useCallback((id: string, field: keyof BulkTaskDraft, value: string) => {
-    onDraftsChange(draftTasks.map(task =>
-      task.id === id ? { ...task, [field]: value, errors: [] } : task
-    ));
-  }, [draftTasks, onDraftsChange]);
-
-  const handleRemoveDraft = useCallback((id: string) => {
-    onDraftsChange(draftTasks.filter(task => task.id !== id));
-  }, [draftTasks, onDraftsChange]);
-
-  const handleParseBulkInput = useCallback(() => {
-    if (!bulkTaskInput.trim()) {
-      toast.error('Please enter task titles');
-      return;
-    }
-
-    const taskTitles = bulkTaskInput.trim().split('\n')
-      .map(title => title.trim())
-      .filter(title => title.length > 0);
-
-    if (taskTitles.length === 0) {
-      toast.error('No valid tasks found');
-      return;
-    }
-
-    const drafts: BulkTaskDraft[] = taskTitles.map((title, index) => {
-      const draftId = `draft-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const errors: string[] = [];
-
-      if (!title.trim()) {
-        errors.push('Task title is required');
-      }
-
-      return {
-        id: draftId,
-        rowNumber: index + 1,
-        title,
-        description: '',
-        assignedTo: defaults.assignedTo,
-        dueDate: defaults.dueDate,
-        priority: defaults.priority as BulkPriority,
-        taskType: defaults.taskType,
-        companyName: defaults.companyName,
-        brand: defaults.brand,
-        errors
-      };
-    });
-
-    onDraftsChange(drafts);
-    setBulkTaskInput('');
-    toast.success(`✅ ${taskTitles.length} tasks parsed successfully`);
-  }, [bulkTaskInput, defaults, onDraftsChange]);
-
-  const handleAddSingleTask = useCallback(() => {
-    const draftId = `draft-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    const newDraft: BulkTaskDraft = {
-      id: draftId,
-      rowNumber: draftTasks.length + 1,
-      title: '',
-      description: '',
-      assignedTo: defaults.assignedTo,
-      dueDate: defaults.dueDate,
-      priority: defaults.priority as BulkPriority,
-      taskType: defaults.taskType,
-      companyName: defaults.companyName,
-      brand: defaults.brand,
-      errors: []
-    };
-
-    onDraftsChange([...draftTasks, newDraft]);
-  }, [draftTasks, defaults, onDraftsChange]);
-
-  const errorCount = draftTasks.reduce((count, task) => count + task.errors.length, 0);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose}></div>
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Bulk Task Creator</h2>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 text-gray-500">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Default Settings */}
-        <div className="px-6 py-4 border-b bg-gray-50">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Default Assignee</label>
-              <select
-                value={defaults.assignedTo}
-                onChange={(e) => onDefaultsChange({ assignedTo: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              >
-                <option value="">Select assignee</option>
-                {users.map(user => (
-                  <option key={user.id || user.email} value={user.email}>
-                    {user.name} ({user.email})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Default Due Date</label>
-              <input
-                type="date"
-                value={defaults.dueDate}
-                onChange={(e) => onDefaultsChange({ dueDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Default Priority</label>
-              <select
-                value={defaults.priority}
-                onChange={(e) => onDefaultsChange({ priority: e.target.value as BulkPriority })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </div>
-            <div className="flex items-end">
-              <button
-                onClick={handleAddSingleTask}
-                className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Add Single Task
-              </button>
-            </div>
-          </div>
-
-          {/* Bulk Input Section */}
-          <div className="mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-semibold text-gray-700">Quick Paste Multiple Tasks</label>
-              <span className="text-xs text-gray-500">One task per line</span>
-            </div>
-            <div className="flex gap-2">
-              <textarea
-                value={bulkTaskInput}
-                onChange={(e) => setBulkTaskInput(e.target.value)}
-                placeholder="Enter task titles (one per line):
-Fix login issue
-Update documentation
-Test mobile responsiveness
-Add user notifications
-..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-h-[100px]"
-                rows={4}
-              />
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={handleParseBulkInput}
-                  disabled={!bulkTaskInput.trim()}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
-                >
-                  Add Tasks
-                </button>
-                <button
-                  onClick={() => {
-                    const sampleTasks = [
-                      "Fix login authentication issue",
-                      "Update API documentation",
-                      "Test mobile responsiveness",
-                      "Add user notification system",
-                      "Optimize database queries",
-                      "Fix CSS styling issues"
-                    ].join('\n');
-                    setBulkTaskInput(sampleTasks);
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm"
-                >
-                  Load Sample
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tasks Table */}
-        <div className="flex-1 overflow-auto px-6 py-4">
-          {draftTasks.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-              <h3 className="text-lg font-medium text-gray-700 mb-2">No tasks added yet</h3>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="font-medium text-gray-700">{draftTasks.length} task(s) to create</span>
-                  {errorCount > 0 && (
-                    <span className="inline-flex items-center gap-1 text-xs text-red-600 bg-red-50 px-2 py-1 rounded-full">
-                      <AlertTriangle className="h-3 w-3" />
-                      {errorCount} error(s) need fixing
-                    </span>
-                  )}
-                  {summary && summary.failures.length > 0 && (
-                    <span className="inline-flex items-center gap-2 text-xs text-yellow-700 bg-yellow-50 px-3 py-1 rounded-full">
-                      <AlertTriangle className="h-3 w-3" />
-                      {summary.failures.length} failed to create
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => navigator.clipboard.writeText(draftTasks.map(d => d.title).join('\n'))}
-                    className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100"
-                  >
-                    Copy All Titles
-                  </button>
-                  <button
-                    onClick={() => onDraftsChange([])}
-                    className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100"
-                  >
-                    Clear All
-                  </button>
-                </div>
-              </div>
-
-              {/* Tasks Table */}
-              <div className="border border-gray-200 rounded-xl overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr className="text-xs uppercase tracking-wide text-gray-500">
-                      <th className="px-4 py-3 text-left w-16">#</th>
-                      <th className="px-4 py-3 text-left">Task Title *</th>
-                      <th className="px-4 py-3 text-left w-56">Assigned To *</th>
-                      <th className="px-4 py-3 text-left w-40">Due Date *</th>
-                      <th className="px-4 py-3 text-left w-20">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
-                    {draftTasks.map((draft) => (
-                      <tr key={draft.id} className={draft.errors.length ? 'bg-red-50/30' : 'hover:bg-gray-50'}>
-                        {/* Index */}
-                        <td className="px-4 py-3">
-                          <div className="text-sm text-gray-500 font-medium">#{draft.rowNumber}</div>
-                        </td>
-
-                        {/* Task Title */}
-                        <td className="px-4 py-3">
-                          <div className="space-y-2">
-                            <input
-                              type="text"
-                              value={draft.title}
-                              onChange={(e) => handleFieldChange(draft.id, 'title', e.target.value)}
-                              className={`w-full px-3 py-2 border ${draft.errors.some(e => e.includes('Title')) ? 'border-red-300' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
-                              placeholder="Enter task title"
-                            />
-                          </div>
-                          {draft.errors.some(e => e.includes('Title')) && (
-                            <p className="text-xs text-red-600 mt-1">Task title is required</p>
-                          )}
-                        </td>
-
-                        {/* Assignee */}
-                        <td className="px-4 py-3">
-                          <select
-                            value={draft.assignedTo}
-                            onChange={(e) => handleFieldChange(draft.id, 'assignedTo', e.target.value)}
-                            className={`w-full px-3 py-2 border ${draft.errors.some(e => e.includes('Assignee') || e.includes('email')) ? 'border-red-300' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white`}
-                          >
-                            <option value="">Select assignee</option>
-                            {users.map(user => (
-                              <option key={user.id || user.email} value={user.email}>
-                                {user.name} ({user.email})
-                              </option>
-                            ))}
-                          </select>
-                          {draft.errors.some(e => e.includes('Assignee') || e.includes('email')) && (
-                            <p className="text-xs text-red-600 mt-1">Please select a valid assignee</p>
-                          )}
-                        </td>
-
-                        {/* Due Date */}
-                        <td className="px-4 py-3">
-                          <input
-                            type="date"
-                            value={draft.dueDate}
-                            onChange={(e) => handleFieldChange(draft.id, 'dueDate', e.target.value)}
-                            className={`w-full px-3 py-2 border ${draft.errors.some(e => e.includes('date')) ? 'border-red-300' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
-                          />
-                          {draft.errors.some(e => e.includes('date')) && (
-                            <p className="text-xs text-red-600 mt-1">Please select a valid date</p>
-                          )}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => handleRemoveDraft(draft.id)}
-                            className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                            title="Remove task"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Errors Summary */}
-              {draftTasks.some(draft => draft.errors.length > 0) && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-red-700 font-medium mb-2">
-                    <AlertTriangle className="h-5 w-5" />
-                    Please fix the following errors before creating tasks:
-                  </div>
-                  <div className="space-y-2">
-                    {draftTasks.map(draft =>
-                      draft.errors.map((error, idx) => (
-                        <div key={`${draft.id}-error-${idx}`} className="text-sm text-red-600">
-                          <span className="font-medium">Row #{draft.rowNumber}:</span> {error}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Previous Summary (if any) */}
-              {summary && summary.failures.length > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-yellow-800 font-medium mb-2">
-                    <AlertTriangle className="h-5 w-5" />
-                    Previous run had {summary.failures.length} failure(s)
-                  </div>
-                  <ul className="list-disc ml-5 text-sm text-yellow-700 space-y-1">
-                    {summary.failures.map(failure => (
-                      <li key={failure.index}>
-                        Row #{failure.rowNumber} - "{failure.title}" → {failure.reason}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t bg-white flex items-center justify-between">
-          <div className="text-sm text-gray-500">
-            {draftTasks.length === 0
-              ? 'Add tasks using the form above'
-              : `Ready to create ${draftTasks.length} task(s)`}
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onSubmit}
-              disabled={draftTasks.length === 0 || submitting || errorCount > 0}
-              className={`px-6 py-2 text-sm font-medium rounded-lg text-white transition-colors flex items-center gap-2 ${draftTasks.length === 0 || errorCount > 0
-                ? 'bg-gray-300 cursor-not-allowed'
-                : submitting
-                  ? 'bg-blue-400'
-                  : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating Tasks...
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4" />
-                  Create {draftTasks.length} Task{draftTasks.length !== 1 ? 's' : ''}
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-BulkImporter.displayName = 'BulkImporter';
-
-// Bulk Actions Component
+// ==================== BULK ACTIONS ====================
 const BulkActions = memo(({
   selectedTasks,
   bulkDeleting,
@@ -1290,7 +1537,7 @@ const BulkActions = memo(({
 
 BulkActions.displayName = 'BulkActions';
 
-// Task Item Component (Mobile View)
+// ==================== MOBILE TASK ITEM ====================
 const MobileTaskItem = memo(({
   task,
   isToggling,
@@ -1533,7 +1780,7 @@ const MobileTaskItem = memo(({
 
 MobileTaskItem.displayName = 'MobileTaskItem';
 
-// Desktop Task Item Component
+// ==================== DESKTOP TASK ITEM ====================
 const DesktopTaskItem = memo(({
   task,
   isToggling,
@@ -1578,7 +1825,7 @@ const DesktopTaskItem = memo(({
             )}
 
             <button
-              onClick={() => onToggleStatus(task.id, originalTask)}
+              onClick={() => onToggleStatus(task.id, task)}
               disabled={isToggling || (isPermanentlyApproved && isAssignee && !isAssigner)}
               className="flex-shrink-0 p-1 hover:bg-gray-100 rounded mt-0.5"
               title={isCompleted ? 'Mark as pending' : 'Mark as completed'}
@@ -1702,7 +1949,7 @@ const DesktopTaskItem = memo(({
 
 DesktopTaskItem.displayName = 'DesktopTaskItem';
 
-// History Timeline Component
+// ==================== PERMANENT HISTORY TIMELINE ====================
 const PermanentHistoryTimeline = memo(({
   timelineItems,
   loadingHistory,
@@ -1862,7 +2109,7 @@ const PermanentHistoryTimeline = memo(({
 
 PermanentHistoryTimeline.displayName = 'PermanentHistoryTimeline';
 
-// Comment Sidebar Component
+// ==================== COMMENT SIDEBAR ====================
 const CommentSidebar = memo(({
   showCommentSidebar,
   selectedTask,
@@ -2008,43 +2255,42 @@ const CommentSidebar = memo(({
                 </div>
 
                 {/* Comments Section */}
-                  {/* Add Comment Section */}
-                  <div className="mt-4">
-                    <h4 className="font-medium text-gray-900 mb-3">Add Comment</h4>
-                    <div className="flex gap-2">
-                      <textarea
-                        value={newComment}
-                        onChange={(e) => onSetNewComment(e.target.value)}
-                        placeholder="Type your comment here..."
-                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[80px] resize-none"
-                        rows={3}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center mt-3">
-                      <button
-                        onClick={onSaveComment}
-                        disabled={!newComment.trim() || commentLoading}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2 transition-colors"
-                      >
-                        {commentLoading ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Sending...
-                          </>
-                        ) : (
-                          <>
-                            <Send className="h-4 w-4" />
-                            Add Comment
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    {!onSaveComment && (
-                      <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
-                        ⚠️ Comment saving functionality is not available.
-                      </div>
-                    )}
+                <div className="mt-4">
+                  <h4 className="font-medium text-gray-900 mb-3">Add Comment</h4>
+                  <div className="flex gap-2">
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => onSetNewComment(e.target.value)}
+                      placeholder="Type your comment here..."
+                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[80px] resize-none"
+                      rows={3}
+                    />
                   </div>
+                  <div className="flex justify-between items-center mt-3">
+                    <button
+                      onClick={onSaveComment}
+                      disabled={!newComment.trim() || commentLoading}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2 transition-colors"
+                    >
+                      {commentLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4" />
+                          Add Comment
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {!onSaveComment && (
+                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
+                      ⚠️ Comment saving functionality is not available.
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
               <>
@@ -2105,7 +2351,7 @@ const CommentSidebar = memo(({
 
 CommentSidebar.displayName = 'CommentSidebar';
 
-// Approval Modal Component
+// ==================== APPROVAL MODAL ====================
 const ApprovalModal = memo(({
   showApprovalModal,
   taskToApprove,
@@ -2155,7 +2401,7 @@ const ApprovalModal = memo(({
 
 ApprovalModal.displayName = 'ApprovalModal';
 
-// Reassign Modal Component
+// ==================== REASSIGN MODAL ====================
 const ReassignModal = memo(({
   showReassignModal,
   reassignTask,
@@ -2221,7 +2467,7 @@ const ReassignModal = memo(({
 
 ReassignModal.displayName = 'ReassignModal';
 
-// Task History Modal Component - UPDATED WITH CREATOR AND ASSIGNEE INFO
+// ==================== TASK HISTORY MODAL ====================
 const TaskHistoryModal = memo(({
   showHistoryModal,
   historyTask,
@@ -2257,23 +2503,23 @@ const TaskHistoryModal = memo(({
     if (getAssignerEmail) {
       return getAssignerEmail(historyTask);
     }
-    
+
     // Fallback logic
     if (!historyTask.assignedBy) return 'Unknown';
-    
+
     if (typeof historyTask.assignedBy === 'object' && historyTask.assignedBy !== null) {
       const assignerObj = historyTask.assignedBy as any;
       if (assignerObj.email) return assignerObj.email;
       if (assignerObj.name) return assignerObj.name;
     }
-    
+
     // Try to find in users
-    const creatorUser = users.find(u => 
+    const creatorUser = users.find(u =>
       u.id === historyTask.assignedBy ||
       u._id === historyTask.assignedBy ||
       u.email === historyTask.assignedBy
     );
-    
+
     return creatorUser?.email || historyTask.assignedBy || 'Unknown';
   };
 
@@ -2281,7 +2527,7 @@ const TaskHistoryModal = memo(({
     if (getEmailByIdInternal) {
       return getEmailByIdInternal(historyTask.assignedTo);
     }
-    
+
     // Fallback logic
     const assignedTo = historyTask.assignedTo;
     if (typeof assignedTo === 'string') {
@@ -2296,7 +2542,7 @@ const TaskHistoryModal = memo(({
         return user?.email || assignedTo || 'Unknown';
       }
     }
-    
+
     return 'Unknown';
   };
 
@@ -2353,7 +2599,7 @@ const TaskHistoryModal = memo(({
                   </p>
                 </div>
               </div>
-              
+
               {/* Creator and Assignee Info - NEW SECTION */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div className="bg-white p-3 rounded-lg border border-blue-100">
@@ -2422,7 +2668,7 @@ const TaskHistoryModal = memo(({
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Activity Timeline</h3>
             </div>
-            
+
             <PermanentHistoryTimeline
               timelineItems={timelineItems}
               loadingHistory={loadingHistory}
@@ -2537,11 +2783,11 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
   // ==================== BULK IMPORT STATE ====================
   const [showBulkImporter, setShowBulkImporter] = useState(false);
   const [bulkImportDefaults, setBulkImportDefaults] = useState<BulkImportDefaults>({
-    assignedTo: currentUser.email || '',
+    assigner: currentUser.email || '', // Changed to assigner
     dueDate: new Date().toISOString().split('T')[0],
     priority: 'medium',
     taskType: 'regular',
-    companyName: 'ACS',
+    companyName: 'acs',
     brand: 'chips'
   });
   const [bulkDraftTasks, setBulkDraftTasks] = useState<BulkTaskDraft[]>([]);
@@ -2855,7 +3101,7 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
     try {
       // Call the original create task function
       const newTask = await onCreateTask();
-      
+
       if (newTask && typeof newTask === 'object' && newTask.id) {
         // Add history record for task creation
         await addHistoryRecord(
@@ -2870,7 +3116,7 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
             createdAt: new Date().toISOString()
           }
         );
-        
+
         toast.success('✅ Task created successfully!');
       }
     } catch (error) {
@@ -3066,10 +3312,10 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
     setBulkCreateSummary(null);
     setBulkDraftTasks([]);
 
-    // Set current user as default assignee
+    // Set current user as default assigner
     setBulkImportDefaults(prev => ({
       ...prev,
-      assignedTo: currentUser.email || '',
+      assigner: currentUser.email || '',
       dueDate: new Date().toISOString().split('T')[0]
     }));
   }, [currentUser]);
@@ -3106,10 +3352,11 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
     setBulkSubmitting(true);
 
     try {
+      // Convert assigner back to assignedTo for API
       const payloads: BulkTaskPayload[] = validatedDrafts.map(draft => ({
         title: draft.title,
         description: draft.description || undefined,
-        assignedTo: draft.assignedTo,
+        assignedTo: draft.assigner, // Map assigner to assignedTo
         dueDate: draft.dueDate,
         priority: (draft.priority || bulkImportDefaults.priority) as BulkPriority,
         taskType: draft.taskType || bulkImportDefaults.taskType,

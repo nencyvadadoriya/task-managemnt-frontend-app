@@ -4,8 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard,
     ListTodo,
-    Calendar as CalendarIcon,
-    Users,
     PlusCircle,
     AlertCircle,
     CheckCircle,
@@ -24,7 +22,6 @@ import {
     Building,
     Tag,
     Edit,
-    User,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -37,7 +34,6 @@ import UserProfilePage from './UserProfilePage';
 
 import type {
     CommentType,
-    NavigationItem,
     Task,
     TaskHistory,
     TaskPriority,
@@ -207,6 +203,26 @@ const DashboardPage = () => {
             return 'Invalid Date';
         }
     }, []);
+
+    const navigateTo = (page: string) => {
+        // Map page names to view states
+        const viewMap: Record<string, 'dashboard' | 'all-tasks' | 'calendar' | 'team' | 'profile'> = {
+            'dashboard': 'dashboard',
+            'tasks': 'all-tasks',
+            'all-tasks': 'all-tasks',
+            'calendar': 'calendar',
+            'team': 'team',
+            'profile': 'profile'
+        };
+
+        const targetView = viewMap[page];
+        if (targetView) {
+            setCurrentView(targetView);
+            console.log(`Navigated to: ${page} (view: ${targetView})`);
+        } else {
+            console.warn(`Unknown page: ${page}`);
+        }
+    };
 
     const isOverdue = useCallback((dueDate: string, status: string) => {
         if (status === 'completed') return false;
@@ -751,47 +767,7 @@ const DashboardPage = () => {
 
     const displayTasks = useMemo(() => getFilteredTasksByStat(), [getFilteredTasksByStat]);
 
-    const navigation: NavigationItem[] = useMemo(
-        () => [
-            {
-                name: 'Dashboard',
-                icon: LayoutDashboard,
-                current: currentView === 'dashboard',
-                onClick: () => setCurrentView('dashboard'),
-                badge: 0,
-            },
-            {
-                name: 'Tasks',
-                icon: ListTodo,
-                current: currentView === 'all-tasks',
-                onClick: () => setCurrentView('all-tasks'),
-                badge: tasks.filter((t) => t.status !== 'completed').length,
-            },
-            {
-                name: 'Calendar',
-                icon: CalendarIcon,
-                current: currentView === 'calendar',
-                onClick: () => setCurrentView('calendar'),
-                badge: 0,
-            },
-            {
-                name: 'Team',
-                icon: Users,
-                current: currentView === 'team',
-                onClick: () => setCurrentView('team'),
-                badge: users.length,
-                showForRoles: ['admin', 'manager'],
-            },
-            {
-                name: 'Profile',
-                icon: User,
-                current: currentView === 'profile',
-                onClick: () => setCurrentView('profile'),
-                badge: 0,
-            },
-        ],
-        [currentView, tasks, users],
-    );
+
 
     const stats: StatMeta[] = useMemo(() => {
         const userTasks = tasks.filter(task => {
@@ -1517,44 +1493,6 @@ const DashboardPage = () => {
             return null;
         }
     }, [tasks, canEditDeleteTask, updateTaskInState]);
-
-    const handleUpdateProfile = useCallback(async (updatedData: Partial<UserType>) => {
-        try {
-            const loadingToast = toast.loading('Updating profile...');
-
-            const updatedUser = {
-                ...currentUser,
-                ...updatedData,
-                updatedAt: new Date().toISOString()
-            };
-
-            if (authService.updateUser) {
-                const response = await authService.updateUser(currentUser.id, updatedUser);
-
-                toast.dismiss(loadingToast);
-
-                if (response.success) {
-                    setCurrentUser(updatedUser);
-                    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-                    toast.success('Profile updated successfully');
-                } else {
-                    toast.error(response.message || 'Failed to update profile');
-                }
-            } else {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-
-                setCurrentUser(updatedUser);
-                localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-
-                toast.dismiss(loadingToast);
-                toast.success('Profile updated successfully (demo)');
-            }
-        } catch (error) {
-            console.error('Error updating profile:', error);
-            toast.error('Failed to update profile');
-        }
-    }, [currentUser]);
-
     if (loading) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex">
@@ -1701,7 +1639,7 @@ const DashboardPage = () => {
             <Sidebar
                 sidebarOpen={sidebarOpen}
                 setSidebarOpen={setSidebarOpen}
-                navigation={navigation}
+                navigateTo={navigateTo}
                 currentUser={currentUser}
                 handleLogout={() => {
                     localStorage.removeItem('token');
@@ -1710,6 +1648,7 @@ const DashboardPage = () => {
                 }}
                 isCollapsed={isSidebarCollapsed}
                 setIsCollapsed={setIsSidebarCollapsed}
+                currentView={currentView}
             />
 
             <div className={mainContentClasses}>
@@ -2484,11 +2423,7 @@ const DashboardPage = () => {
                             ) : currentView === 'profile' ? (
                                 <UserProfilePage
                                     user={currentUser}
-                                    tasks={tasks}
-                                    onUpdateProfile={handleUpdateProfile}
                                     formatDate={formatDate}
-                                    isOverdue={isOverdue}
-                                    isSidebarCollapsed={isSidebarCollapsed}
                                 />
                             ) : null}
                         </div>
