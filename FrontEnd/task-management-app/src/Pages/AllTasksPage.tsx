@@ -4116,11 +4116,11 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
       return true;
     });
 
-    // Sorting
+    // Sorting - Show newest tasks first by creation date
     filtered.sort((a, b) => {
-      const aValue = new Date(a.dueDate).getTime();
-      const bValue = new Date(b.dueDate).getTime();
-      return aValue > bValue ? 1 : -1;
+      const aValue = new Date(a.createdAt || a.id).getTime();
+      const bValue = new Date(b.createdAt || b.id).getTime();
+      return bValue - aValue; // Descending order (newest first)
     });
 
     return filtered;
