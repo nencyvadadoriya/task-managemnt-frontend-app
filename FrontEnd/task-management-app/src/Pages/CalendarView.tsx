@@ -5,31 +5,31 @@ import { ChevronLeft, ChevronRight, MoreVertical, CheckCircle, XCircle, RefreshC
 import type { Task, TaskStatus, UserType } from '../Types/Types';
 
 interface CalendarViewProps {
-  tasks: Task[];
-  currentUser: UserType;
-  handleToggleTaskStatus: (taskId: string, currentStatus: TaskStatus) => Promise<void>;
-  handleDeleteTask: (taskId: string) => Promise<void>;
-  handleUpdateTask: (taskId: string, updatedData: Partial<Task>) => Promise<void>;
-  canEditDeleteTask: (task: Task) => boolean;
-  canMarkTaskDone: (task: Task) => boolean;
-  getAssignedUserInfo: (task: Task) => { name: string; email: string };
-  formatDate: (dateString: string) => string;
-  isOverdue: (dueDate: string, status: string) => boolean;
+  tasks?: Task[];
+  currentUser?: UserType;
+  handleToggleTaskStatus?: (taskId: string, currentStatus: TaskStatus) => Promise<void>;
+  handleDeleteTask?: (taskId: string) => Promise<void>;
+  handleUpdateTask?: (taskId: string, updatedData: Partial<Task>) => Promise<void>;
+  canEditDeleteTask?: (task: Task) => boolean;
+  canMarkTaskDone?: (task: Task) => boolean;
+  getAssignedUserInfo?: (task: Task) => { name: string; email: string };
+  formatDate?: (dateString: string) => string;
+  isOverdue?: (dueDate: string, status: string) => boolean;
   // Optional sidebar collapsed state from DashboardPage
   isSidebarCollapsed?: boolean;
 }
 
 const CalendarView: React.FC<CalendarViewProps> = ({
-  tasks,
-  currentUser,
+  tasks = [],
+  currentUser = {} as UserType,
   handleToggleTaskStatus,
   handleDeleteTask,
   handleUpdateTask,
-  canEditDeleteTask,
-  canMarkTaskDone,
-  getAssignedUserInfo,
-  formatDate,
-  isOverdue
+  canEditDeleteTask = () => false,
+  canMarkTaskDone = () => false,
+  getAssignedUserInfo = () => ({ name: 'Unknown', email: '' }),
+  formatDate = (d) => d,
+  isOverdue = () => false
 }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
@@ -128,13 +128,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           handleSignInChange(auth.isSignedIn.get());
           auth.isSignedIn.listen(handleSignInChange);
         })
-        .catch((error : any) => {
-            console.error('Error initializing Google API client', error);
-            if (isMounted) {
-              setGoogleAuthReady(false);
-              setGoogleError('Unable to initialize Google Calendar sync. Check console for details.');
-            } 
-          });
+        .catch((error: any) => {
+          console.error('Error initializing Google API client', error);
+          if (isMounted) {
+            setGoogleAuthReady(false);
+            setGoogleError('Unable to initialize Google Calendar sync. Check console for details.');
+          }
+        });
     };
 
     setGoogleError(null);
@@ -310,7 +310,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   // Handle edit task
   const handleEditTask = (task: Task) => {
     if (task.type === 'google-event') return;
-    handleUpdateTask(task.id, task);
+    handleUpdateTask?.(task.id, task);
   };
 
   // Handle delete task with confirmation
@@ -319,7 +319,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       return;
     }
     if (window.confirm('Are you sure you want to delete this task?')) {
-      await handleDeleteTask(taskId);
+      await handleDeleteTask?.(taskId);
     }
   };
 
@@ -329,7 +329,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       return;
     }
 
-    await handleToggleTaskStatus(task.id, task.status as TaskStatus);
+    await handleToggleTaskStatus?.(task.id, task.status as TaskStatus);
   };
 
   return (
@@ -392,8 +392,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   onClick={fetchGoogleEvents}
                   disabled={loadingGoogleEvents}
                   className={`px-3 py-2 text-sm rounded-lg transition-colors flex items-center space-x-1 ${loadingGoogleEvents
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                 >
                   <RefreshCw className={`h-4 w-4 ${loadingGoogleEvents ? 'animate-spin' : ''}`} />
@@ -412,8 +412,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   onClick={handleGoogleSignIn}
                   disabled={!googleAuthReady}
                   className={`px-4 py-2 text-sm rounded-lg transition-colors font-medium ${googleAuthReady
-                      ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     }`}
                 >
                   Connect Google Calendar
@@ -597,8 +597,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     <div
                       key={task.id}
                       className={`p-4 border rounded-lg hover:border-blue-300 transition-colors duration-200 ${task.type === 'google-event'
-                          ? 'border-purple-200 bg-purple-50'
-                          : 'border-gray-200 bg-white'
+                        ? 'border-purple-200 bg-purple-50'
+                        : 'border-gray-200 bg-white'
                         }`}
                     >
                       <div className="flex justify-between items-start mb-3">

@@ -30,7 +30,7 @@ import {
   FileClock,
 } from 'lucide-react';
 
-import type { Task, UserType, CommentType, TaskHistory } from '../Types/Types';
+import type { Task, UserType, CommentType, TaskHistory, Brand } from '../Types/Types';
 import toast from 'react-hot-toast';
 import { useMemo, useCallback, useState, memo } from 'react';
 
@@ -67,6 +67,7 @@ interface AllTasksPageProps {
   onBulkCreateTasks?: (tasks: BulkTaskPayload[]) => Promise<BulkCreateResult>;
   // Optional sidebar collapsed state from DashboardPage
   isSidebarCollapsed?: boolean;
+  brands: Brand[];
 }
 
 type BulkPriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -161,16 +162,8 @@ interface HistoryDisplayItem {
 }
 
 // ==================== CONSTANTS ====================
-const COMPANY_BRAND_MAP: Record<string, string[]> = {
-  'acs': ['chips', 'soy', 'saffola'],
-  'md inpex': ['inpex pro', 'inpex lite', 'inpex max'],
-  'tech solutions': ['techx', 'techpro', 'techlite'],
-  'global inc': ['lays', 'pepsi', '7up']
-};
-
 const PRIORITY_OPTIONS = ['low', 'medium', 'high', 'urgent'] as const;
 const TASK_TYPE_OPTIONS = ['regular', 'troubleshoot', 'maintenance', 'development', 'bug', 'feature'] as const;
-const COMPANY_OPTIONS = ['acs', 'md inpex', 'tech solutions', 'global inc', 'other'] as const;
 
 // History action type constants
 const HISTORY_ACTION_CONFIG: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
@@ -265,6 +258,7 @@ const BulkImporter = memo(({
   draftTasks = [],
   defaults,
   users = [],
+  companyBrandMap,
   onDefaultsChange,
   onDraftsChange,
   onClose,
@@ -275,6 +269,7 @@ const BulkImporter = memo(({
   draftTasks?: BulkTaskDraft[];
   defaults: BulkImportDefaults;
   users?: UserType[];
+  companyBrandMap: Record<string, string[]>;
   onDefaultsChange: (defaults: Partial<BulkImportDefaults>) => void;
   onDraftsChange: (drafts: BulkTaskDraft[]) => void;
   onClose: () => void;
@@ -283,7 +278,6 @@ const BulkImporter = memo(({
   summary?: BulkCreateResult | null;
 }) => {
   const [bulkTaskInput, setBulkTaskInput] = useState<string>('');
-
 
   // Get today's date in YYYY-MM-DD format
   const today = useMemo(() => {
@@ -294,8 +288,8 @@ const BulkImporter = memo(({
   // Filter brands based on selected company
   const filteredBrands = useMemo(() => {
     if (!defaults.companyName || defaults.companyName === 'all') return [];
-    return COMPANY_BRAND_MAP[defaults.companyName] || [];
-  }, [defaults.companyName]);
+    return companyBrandMap[defaults.companyName] || [];
+  }, [defaults.companyName, companyBrandMap]);
 
   const handleFieldChange = useCallback((id: string, field: keyof BulkTaskDraft, value: string) => {
     onDraftsChange(draftTasks.map(task =>
@@ -306,7 +300,6 @@ const BulkImporter = memo(({
   const handleRemoveDraft = useCallback((id: string) => {
     onDraftsChange(draftTasks.filter(task => task.id !== id));
   }, [draftTasks, onDraftsChange]);
-
 
   const handleParseBulkInput = useCallback(() => {
     if (!bulkTaskInput.trim()) {
@@ -452,6 +445,21 @@ const BulkImporter = memo(({
     toast.success(`✅ Priority applied to all ${draftTasks.length} tasks`);
   }, [defaults.priority, draftTasks, onDraftsChange]);
 
+  // ✅ Apply default task type to all tasks
+  const handleApplyTaskTypeToAll = useCallback(() => {
+    if (!defaults.taskType) {
+      toast.error('Please select a task type first');
+      return;
+    }
+
+    onDraftsChange(draftTasks.map(task => ({
+      ...task,
+      taskType: defaults.taskType
+    })));
+
+    toast.success(`✅ Task type applied to all ${draftTasks.length} tasks`);
+  }, [defaults.taskType, draftTasks, onDraftsChange]);
+
   // Handle due date change with validation
   const handleDueDateChange = useCallback((date: string) => {
     if (date && date < today) {
@@ -468,7 +476,7 @@ const BulkImporter = memo(({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose}></div>
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
@@ -482,9 +490,8 @@ const BulkImporter = memo(({
 
         {/* Top Controls - All Dropdowns */}
         <div className="px-6 py-4 border-b bg-gray-50">
-
-          {/* Filter Dropdowns Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
+          {/* Filter Dropdowns Grid - Updated to 6 columns */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
             {/* Default Assigner */}
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -529,7 +536,7 @@ const BulkImporter = memo(({
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
                 <option value="">Select company</option>
-                {Object.keys(COMPANY_BRAND_MAP).map(company => (
+                {Object.keys(companyBrandMap).map(company => (
                   <option key={company} value={company}>
                     {company.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                   </option>
@@ -583,7 +590,6 @@ const BulkImporter = memo(({
                 min={today}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               />
-
             </div>
 
             {/* Default Priority */}
@@ -607,15 +613,38 @@ const BulkImporter = memo(({
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+
+            {/* ✅ Default Task Type */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-gray-700">Task Type</label>
+                <button
+                  onClick={handleApplyTaskTypeToAll}
+                  disabled={!defaults.taskType || draftTasks.length === 0}
+                  className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                >
+                  Apply to all
+                </button>
+              </div>
+              <select
+                value={defaults.taskType}
+                onChange={(e) => onDefaultsChange({ taskType: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">Select type</option>
+                <option value="regular">Regular</option>
+                <option value="troubleshoot">Troubleshoot</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="development">Development</option>
               </select>
             </div>
           </div>
 
           {/* Bulk Input Section */}
-          <div className="mt-4 pt-4 ">
-            <div className="flex items-center justify-between mb-3">
-
-            </div>
+          <div className="mt-4 pt-4">
             <div className="flex gap-3">
               <textarea
                 value={bulkTaskInput}
@@ -687,17 +716,18 @@ Add user notifications
                 </div>
               </div>
 
-              {/* Tasks Table - New tasks appear at TOP */}
+              {/* Tasks Table - Updated with Task Type column */}
               <div className="border border-gray-200 rounded-xl overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr className="text-xs uppercase tracking-wide text-gray-500">
                       <th className="px-4 py-3 text-left w-16">#</th>
                       <th className="px-4 py-3 text-left">Task Title *</th>
-                      <th className="px-4 py-3 text-left w-56">Assigner *</th>
-                      <th className="px-4 py-3 text-left w-56">Company & Brand</th>
-                      <th className="px-4 py-3 text-left w-40">Due Date</th>
-                      <th className="px-4 py-3 text-left w-32">Priority</th>
+                      <th className="px-4 py-3 text-left w-48">Assigner *</th>
+                      <th className="px-4 py-3 text-left w-48">Company & Brand</th>
+                      <th className="px-4 py-3 text-left w-36">Due Date</th>
+                      <th className="px-4 py-3 text-left w-28">Priority</th>
+                      <th className="px-4 py-3 text-left w-28">Task Type</th> {/* ✅ New column */}
                       <th className="px-4 py-3 text-left w-20">Actions</th>
                     </tr>
                   </thead>
@@ -705,7 +735,7 @@ Add user notifications
                     {draftTasks.map((draft, index) => {
                       // Get brands for this draft's company
                       const draftCompanyBrands = draft.companyName && draft.companyName !== 'all'
-                        ? COMPANY_BRAND_MAP[draft.companyName] || []
+                        ? companyBrandMap[draft.companyName] || []
                         : [];
 
                       return (
@@ -750,7 +780,7 @@ Add user notifications
                             )}
                           </td>
 
-                          {/* Company & Brand */}
+                          {/* Company & Brand - Fixed layout */}
                           <td className="px-4 py-3">
                             <div className="space-y-2">
                               {/* Company Dropdown */}
@@ -763,7 +793,7 @@ Add user notifications
                                 className={`w-full px-3 py-2 border ${draft.errors.some(e => e.includes('Company')) ? 'border-red-300' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
                               >
                                 <option value="">Select company</option>
-                                {Object.keys(COMPANY_BRAND_MAP).map(company => (
+                                {Object.keys(companyBrandMap).map(company => (
                                   <option key={company} value={company}>
                                     {company.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                                   </option>
@@ -827,6 +857,33 @@ Add user notifications
                               <option value="high">High</option>
                               <option value="urgent">Urgent</option>
                             </select>
+                          </td>
+
+                          {/* ✅ Task Type Column */}
+                          <td className="px-4 py-3">
+                            <select
+                              value={draft.taskType}
+                              onChange={(e) => handleFieldChange(draft.id, 'taskType', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            >
+                              <option value="">Select type</option>
+                              <option value="regular">Regular</option>
+                              <option value="troubleshoot">Troubleshoot</option>
+                              <option value="maintenance">Maintenance</option>
+                              <option value="development">Development</option>
+                              <option value="bug">Bug</option>
+                              <option value="feature">Feature</option>
+                              <option value="other">Other</option>
+                            </select>
+                            {draft.taskType === 'other' && (
+                              <input
+                                type="text"
+                                value={draft.taskType === 'other' ? '' : draft.taskType}
+                                onChange={(e) => handleFieldChange(draft.id, 'taskType', e.target.value)}
+                                className="w-full mt-2 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                placeholder="Enter custom task type"
+                              />
+                            )}
                           </td>
 
                           {/* Actions */}
@@ -937,6 +994,7 @@ const EditTaskModal = memo(({
   editFormData,
   editLoading,
   users,
+  companyBrandMap,
   onClose,
   onFormChange,
   onSubmit
@@ -946,16 +1004,17 @@ const EditTaskModal = memo(({
   editFormData: TaskFormData;
   editLoading: boolean;
   users: UserType[];
+  companyBrandMap: Record<string, string[]>;
   onClose: () => void;
   onFormChange: (field: keyof TaskFormData, value: string) => void;
   onSubmit: () => Promise<void>;
 }) => {
   if (!showEditModal || !editingTask) return null;
 
-  const availableBrands = editFormData.company && COMPANY_BRAND_MAP[editFormData.company]
-    ? COMPANY_BRAND_MAP[editFormData.company]
+  const availableBrands = editFormData.company && companyBrandMap[editFormData.company]
+    ? companyBrandMap[editFormData.company]
     : [];
-
+  const COMPANY_OPTIONS = useMemo(() => Object.keys(companyBrandMap), [companyBrandMap]);
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose}></div>
@@ -1088,9 +1147,9 @@ const EditTaskModal = memo(({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option value="">Select company</option>
-                  {COMPANY_OPTIONS.map(company => (
+                  {COMPANY_OPTIONS.map((company: string) => (
                     <option key={company} value={company}>
-                      {company.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                     {company.split(' ').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                     </option>
                   ))}
                 </select>
@@ -2715,8 +2774,22 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
   onApproveTask,
   onUpdateTaskApproval,
   onFetchTaskHistory,
-  onBulkCreateTasks
+  onBulkCreateTasks,
+  brands = []
 }) => {
+  // Derive dynamic company-brand map and options
+  const COMPANY_BRAND_MAP = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    brands.forEach(b => {
+      const companyKey = b.company.toLowerCase();
+      if (!map[companyKey]) map[companyKey] = [];
+      if (!map[companyKey].includes(b.name)) {
+        map[companyKey].push(b.name);
+      }
+    });
+    return map;
+  }, [brands]);
+
   // State
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [deletingTasks, setDeletingTasks] = useState<string[]>([]);
@@ -4116,11 +4189,11 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
       return true;
     });
 
-    // Sorting
+    // Sorting - Show newest tasks first by creation date
     filtered.sort((a, b) => {
-      const aValue = new Date(a.dueDate).getTime();
-      const bValue = new Date(b.dueDate).getTime();
-      return aValue > bValue ? 1 : -1;
+      const aValue = new Date(a.createdAt || a.id).getTime();
+      const bValue = new Date(b.createdAt || b.id).getTime();
+      return bValue - aValue; // Descending order (newest first)
     });
 
     return filtered;
@@ -4331,6 +4404,7 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
         editFormData={editFormData}
         editLoading={editLoading}
         users={users}
+        companyBrandMap={COMPANY_BRAND_MAP}
         onClose={() => setShowEditModal(false)}
         onFormChange={handleEditFormChange}
         onSubmit={handleEditSubmit}
@@ -4342,6 +4416,7 @@ const AllTasksPage: React.FC<AllTasksPageProps> = ({
           draftTasks={bulkDraftTasks}
           defaults={bulkImportDefaults}
           users={users}
+          companyBrandMap={COMPANY_BRAND_MAP}
           onDefaultsChange={handleBulkDefaultsChange}
           onDraftsChange={handleBulkDraftsChange}
           onClose={() => setShowBulkImporter(false)}

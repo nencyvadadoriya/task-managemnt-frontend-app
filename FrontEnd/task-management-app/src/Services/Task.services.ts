@@ -7,7 +7,7 @@ const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
     if (!token) {
         console.error("JWT Token is missing from localStorage.");
-        return {}; 
+        return {};
     }
     return {
         headers: {
@@ -26,9 +26,9 @@ class TaskService {
     authDeletedTask = "deleteTask";
 
     private buildCommentsUrl(taskId: string, commentId?: string) {
-        let url = `${this.baseUrl}${taskId}/comments`;  
+        let url = `${this.baseUrl}${taskId}/comments`;
         if (commentId) {
-            url += `/${commentId}`; 
+            url += `/${commentId}`;
         }
         return url;
     }
@@ -41,13 +41,13 @@ class TaskService {
     async addTask(payload: any) {
         try {
             console.log('📤 Sending task to API:', payload);
-            
+
             const res = await axios.post(
-                this.baseUrl + this.authAddTask, 
-                payload, 
+                this.baseUrl + this.authAddTask,
+                payload,
                 getAuthHeaders() // 🔑 AUTH HEADER ADDED
             );
-            
+
             console.log('📥 API Response:', res.data);
 
             const task = res.data.data;
@@ -101,7 +101,7 @@ class TaskService {
                 this.baseUrl + this.authSingleTask + `/${id}`,
                 getAuthHeaders() // 🔑 AUTH HEADER ADDED
             );
-            
+
             return res.data;
         } catch (err) {
             console.log("Single Task Error:", err);
@@ -113,13 +113,13 @@ class TaskService {
     async updateTask(id: string, payload: any) {
         try {
             console.log('📝 Updating task:', id, payload);
-            
+
             const res = await axios.put(
-                this.baseUrl + this.authUpdateTask + `/${id}`, 
+                this.baseUrl + this.authUpdateTask + `/${id}`,
                 payload,
                 getAuthHeaders() // 🔑 AUTH HEADER ADDED
             );
-            
+
             console.log('✅ Update response:', res.data);
 
             const task = res.data.data;
@@ -142,14 +142,14 @@ class TaskService {
     async deleteTask(id: string) {
         try {
             console.log('Sending DELETE request for task ID:', id);
-            
+
             const res = await axios.delete(
                 this.baseUrl + this.authDeletedTask + `/${id}`,
                 getAuthHeaders() // 🔑 Using common function now
             );
 
             console.log(' DELETE Response:', res.data);
-            
+
             return {
                 success: Boolean(res.data.success),
                 data: res.data.data,
@@ -172,7 +172,7 @@ class TaskService {
     async addComment(taskId: string, content: string) {
         try {
             console.log('💾 Adding comment for task:', taskId, content);
-            
+
             const payload = {
                 content: content
                 // User info backend में token से automatic add होगी
@@ -203,14 +203,14 @@ class TaskService {
 
     // ✅ CORRECTED: Fetch Comments method
     async fetchComments(taskId: string) {
-        try {            
+        try {
             const res = await axios.get(
                 this.buildCommentsUrl(taskId),
                 getAuthHeaders()
             );
 
             console.log('✅ Comments fetch response:', res.data);
-            
+
             return {
                 success: Boolean(res.data.success),
                 data: res.data.data || [],
@@ -230,14 +230,14 @@ class TaskService {
     async deleteComment(taskId: string, commentId: string) {
         try {
             console.log('🗑️ Deleting comment:', commentId, 'for task:', taskId);
-            
+
             const res = await axios.delete(
                 this.buildCommentsUrl(taskId, commentId),
                 getAuthHeaders()
             );
 
             console.log('✅ Comment delete response:', res.data);
-            
+
             return {
                 success: Boolean(res.data.success),
                 message: res.data.message || res.data.msg || 'Comment deleted successfully'
@@ -255,7 +255,7 @@ class TaskService {
     async updateTaskApproval(taskId: string, completedApproval: boolean) {
         try {
             console.log('✅ Updating task approval:', taskId, completedApproval);
-            
+
             const payload = {
                 completedApproval: completedApproval
             };
@@ -267,7 +267,7 @@ class TaskService {
             );
 
             console.log('✅ Approval update response:', res.data);
-            
+
             return {
                 success: Boolean(res.data.success),
                 data: res.data.data,
@@ -333,6 +333,28 @@ class TaskService {
                 success: false,
                 data: null,
                 message: error.response?.data?.msg || 'Failed to add history'
+            };
+        }
+    }
+
+    async inviteToTask(taskId: string, email: string, role: string) {
+        try {
+            const res = await axios.post(
+                `${this.baseUrl}${taskId}/invite`,
+                { email, role },
+                getAuthHeaders()
+            );
+
+            return {
+                success: Boolean(res.data.success),
+                data: res.data.data,
+                message: res.data.message || 'User invited successfully'
+            };
+        } catch (error: any) {
+            console.error('Error inviting to task:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to invite user'
             };
         }
     }

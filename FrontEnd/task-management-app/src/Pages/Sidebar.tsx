@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, LogOut, ListTodo, ChevronLeft, ChevronRight, Menu, Sun, Moon,
-  Users, Home, Calendar, CheckSquare, User
+  Users, Home, Calendar, CheckSquare, User, Building
 } from 'lucide-react';
 import type { UserType } from '../Types/Types';
 
@@ -13,7 +13,7 @@ interface SidebarProps {
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
   navigateTo: (page: string) => void;
-  currentView?: 'dashboard' | 'all-tasks' | 'calendar' | 'team' | 'profile';
+  currentView?: 'dashboard' | 'all-tasks' | 'calendar' | 'team' | 'profile' | 'brands' | 'brand-detail';
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -60,7 +60,14 @@ const Sidebar: React.FC<SidebarProps> = ({
         icon: CheckSquare,
         current: currentView === 'all-tasks',
         onClick: () => navigateTo('tasks'),
-        badge: 5 // Example badge count
+        badge:0
+      },
+      {
+        name: 'Brands',
+        icon: Building,
+        current: currentView === 'brands',
+        onClick: () => navigateTo('brands'),
+        badge: 0
       },
       {
         name: 'Calendar',
@@ -80,7 +87,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           icon: Users,
           current: currentView === 'team',
           onClick: () => navigateTo('team'),
-          badge: 3 // Example badge count
+          badge: 0
         },
         {
           name: 'Profile',
@@ -172,8 +179,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                     setSidebarOpen(false);
                   }}
                   className={`group flex items-center justify-between w-full px-3 py-3 text-base font-medium rounded-xl transition-all duration-200 ${item.current
-                      ? 'bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 text-blue-600 dark:text-blue-400 border-l-4 border-blue-500'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-white hover:border-l-4 hover:border-gray-300 dark:hover:border-gray-600'
+                    ? 'bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 text-blue-600 dark:text-blue-400 border-l-4 border-blue-500'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-white hover:border-l-4 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                 >
                   <div className="flex items-center">
@@ -262,8 +269,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                   key={item.name}
                   onClick={item.onClick}
                   className={`group flex items-center justify-between w-full px-3 py-3 rounded-xl transition-all duration-200 ${item.current
-                      ? 'bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 text-blue-600 dark:text-blue-400'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-white'
+                    ? 'bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 text-blue-600 dark:text-blue-400'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-white'
                     } ${isCollapsed ? 'justify-center px-2' : ''}`}
                   title={isCollapsed ? item.name : ''}
                 >

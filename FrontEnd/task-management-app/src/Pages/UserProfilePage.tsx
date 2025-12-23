@@ -1,7 +1,7 @@
 import React from 'react';
-import { 
-    User, 
-    Mail, 
+import {
+    User,
+    Mail,
     Calendar,
     CheckCircle,
 } from 'lucide-react';
@@ -9,14 +9,24 @@ import {
 import type { UserType } from '../Types/Types';
 
 interface UserProfilePageProps {
-    user: UserType; // The profile being viewed
-    formatDate: (dateString: string) => string;
+    user?: UserType; // The profile being viewed
+    formatDate?: (dateString: string) => string;
 }
 
 const UserProfilePage: React.FC<UserProfilePageProps> = ({
-    user, 
-    formatDate,
+    user = {} as UserType,
+    formatDate = (d) => d,
 }) => {
+    if (!user || Object.keys(user).length === 0) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold text-gray-900">User not found</h2>
+                    <p className="text-gray-600 mt-2">Please select a user to view their profile.</p>
+                </div>
+            </div>
+        );
+    }
 
 
     return (
@@ -39,7 +49,7 @@ const UserProfilePage: React.FC<UserProfilePageProps> = ({
                                 </p>
                             </div>
                         </div>
-                        
+
                     </div>
                 </div>
 
@@ -68,7 +78,7 @@ const UserProfilePage: React.FC<UserProfilePageProps> = ({
                                             {user.name}
                                         </h2>
                                         <div className="flex flex-wrap items-center gap-3">
-                                            
+
                                             <span className="text-gray-600 flex items-center gap-1">
                                                 <Calendar className="h-4 w-4" />
                                                 Member since {formatDate(user.joinDate || new Date().toISOString())}
@@ -99,7 +109,7 @@ const UserProfilePage: React.FC<UserProfilePageProps> = ({
                                                 <p className="font-medium text-gray-900 break-all">{user.email}</p>
                                             </div>
                                         </div>
-                                      </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -115,7 +125,7 @@ const UserProfilePage: React.FC<UserProfilePageProps> = ({
                                 </div>
                                 <h3 className="text-lg font-semibold">Profile Overview</h3>
                             </div>
-                            
+
                             <div className="space-y-4">
                                 <div>
                                     <p className="text-blue-100 text-sm mb-1">Full Name</p>

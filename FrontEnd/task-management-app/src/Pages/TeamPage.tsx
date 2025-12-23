@@ -16,8 +16,6 @@ import {
     EyeOff,
     UserCog,
     User,
-    CheckCircle,
-    Clock,
     AlertCircle,
     Briefcase,
 } from 'lucide-react';
@@ -26,23 +24,23 @@ import type { Task, UserType } from '../Types/Types';
 import toast from 'react-hot-toast';
 
 interface TeamPageProps {
-    users: UserType[];
-    tasks: Task[];
-    onDeleteUser: (userId: string) => Promise<void>;
-    onAddUser: (newUser: Partial<UserType>) => Promise<void>;
-    onUpdateUser: (userId: string, updatedUser: Partial<UserType>) => Promise<void>;
-    isOverdue: (dueDate: string, status: string) => boolean;
-    currentUser: UserType;
+    users?: UserType[];
+    tasks?: Task[];
+    onDeleteUser?: (userId: string) => Promise<void>;
+    onAddUser?: (newUser: Partial<UserType>) => Promise<void>;
+    onUpdateUser?: (userId: string, updatedUser: Partial<UserType>) => Promise<void>;
+    isOverdue?: (dueDate: string, status: string) => boolean;
+    currentUser?: UserType;
 }
 
 const TeamPage: React.FC<TeamPageProps> = ({
-    users,
-    tasks,
+    users = [],
+    tasks = [],
     onDeleteUser,
     onAddUser,
     onUpdateUser,
-    isOverdue,
-    currentUser,
+    isOverdue = () => false,
+    currentUser = {} as UserType,
 }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -118,14 +116,14 @@ const TeamPage: React.FC<TeamPageProps> = ({
         return (userId: string, userEmail: string) => {
             const assignedTasks = getTasksForUser(userId, userEmail);
             const createdTasks = getTasksCreatedByUser(userId, userEmail);
-            
+
             const totalAssigned = assignedTasks.length;
             const completed = assignedTasks.filter(t => t.status === 'completed').length;
-            const pending = assignedTasks.filter(t => 
+            const pending = assignedTasks.filter(t =>
                 t.status === 'pending' || t.status === 'in-progress'
             ).length;
             const overdue = assignedTasks.filter(t => isOverdue(t.dueDate, t.status)).length;
-            
+
             return {
                 totalAssigned,
                 completed,
@@ -239,7 +237,9 @@ const TeamPage: React.FC<TeamPageProps> = ({
 
         setDeletingUserId(userToDelete);
         try {
-            await onDeleteUser(userToDelete);
+            if (onDeleteUser) {
+                await onDeleteUser(userToDelete);
+            }
             toast.success('User deleted successfully');
             setShowDeleteModal(false);
             setUserToDelete(null);
@@ -271,7 +271,9 @@ const TeamPage: React.FC<TeamPageProps> = ({
 
         setSavingUserId(editingUser.id);
         try {
-            await onUpdateUser(editingUser.id, editingUser);
+            if (onUpdateUser) {
+                await onUpdateUser(editingUser.id, editingUser);
+            }
             toast.success('User updated successfully');
             setShowEditModal(false);
             setEditingUser(null);
@@ -341,8 +343,9 @@ const TeamPage: React.FC<TeamPageProps> = ({
                 position: newUser.position || '',
                 phone: newUser.phone || ''
             };
-
-            await onAddUser(userData);
+            if (onAddUser) {
+                await onAddUser(userData);
+            }
             toast.success('User added successfully');
             setShowAddModal(false);
             setNewUser({
@@ -389,7 +392,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
 
     const getUserAvatar = (user: UserType): JSX.Element => {
         const initials = getUserInitials(user.name);
-        
+
         // Get gradient based on role
         let gradient = 'from-gray-600 to-gray-800';
         switch (user.role?.toLowerCase()) {
@@ -418,130 +421,30 @@ const TeamPage: React.FC<TeamPageProps> = ({
 
     // If not admin, show limited view message
     if (!isCurrentUserAdmin) {
-        const userStats = getUserStats(currentUser.id, currentUser.email);
-        
         return (
             <div className="space-y-8">
                 <div className="md:flex md:items-center md:justify-between">
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-3">
                             <div className="p-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl">
-                                <User className="h-8 w-8 text-white" />
+                                <Shield className="h-8 w-8 text-white" />
                             </div>
                             <div>
-                                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-                                    Your Profile
-                                </h1>
-                                <p className="mt-1 text-sm text-gray-500">
-                                    View your tasks and performance
-                                </p>
+                                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Team Management</h1>
+                                <p className="mt-1 text-sm text-gray-500">This page is available to administrators only</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* User's own card */}
-                <div className="grid grid-cols-1 gap-6">
-                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                        <div className="p-6">
-                            <div className="flex items-start justify-between">
-                                <div className="flex items-center space-x-4">
-                                    {getUserAvatar(currentUser)}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-start justify-between">
-                                            <div>
-                                                <h3 className="font-semibold text-gray-900 text-lg">
-                                                    {currentUser.name}
-                                                </h3>
-                                                <p className="text-sm text-gray-500 flex items-center mt-1">
-                                                    <Mail className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />
-                                                    <span className="truncate">{currentUser.email}</span>
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center mt-3 space-x-2">
-                                            <span className={`px-3 py-1.5 text-xs font-medium rounded-lg flex items-center gap-1.5 ${getRoleBadgeColor(currentUser.role)}`}>
-                                                {getRoleIcon(currentUser.role)}
-                                                {currentUser.role || 'User'}
-                                            </span>
-                                            {userStats.completionRate > 0 && (
-                                                <span className="px-3 py-1.5 text-xs font-medium bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100">
-                                                    {userStats.completionRate}% completion rate
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Stats Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                                <div className="bg-blue-50 rounded-lg p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <div className="text-xs font-medium text-blue-600 mb-1">Total Tasks</div>
-                                            <div className="text-xl font-bold text-gray-900">{userStats.totalAssigned}</div>
-                                        </div>
-                                        <Briefcase className="h-5 w-5 text-blue-400" />
-                                    </div>
-                                </div>
-
-                                <div className="bg-green-50 rounded-lg p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <div className="text-xs font-medium text-green-600 mb-1">Completed</div>
-                                            <div className="text-xl font-bold text-gray-900">{userStats.completed}</div>
-                                        </div>
-                                        <CheckCircle className="h-5 w-5 text-green-400" />
-                                    </div>
-                                </div>
-
-                                <div className="bg-amber-50 rounded-lg p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <div className="text-xs font-medium text-amber-600 mb-1">Pending</div>
-                                            <div className="text-xl font-bold text-gray-900">{userStats.pending}</div>
-                                        </div>
-                                        <Clock className="h-5 w-5 text-amber-400" />
-                                    </div>
-                                </div>
-
-                                <div className="bg-red-50 rounded-lg p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <div className="text-xs font-medium text-red-600 mb-1">Overdue</div>
-                                            <div className="text-xl font-bold text-gray-900">{userStats.overdue}</div>
-                                        </div>
-                                        <AlertCircle className="h-5 w-5 text-red-400" />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Additional Info */}
-                            <div className="mt-6 pt-6 border-t border-gray-200">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {(currentUser.department || currentUser.position) && (
-                                        <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                                            <Briefcase className="h-5 w-5 text-gray-400" />
-                                            <div>
-                                                <p className="text-sm text-gray-500">Department & Position</p>
-                                                <p className="font-medium text-gray-900">
-                                                    {currentUser.department || 'Not specified'} • {currentUser.position || 'Not specified'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )}
-                                    {currentUser.phone && (
-                                        <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                                            <Mail className="h-5 w-5 text-gray-400" />
-                                            <div>
-                                                <p className="text-sm text-gray-500">Contact</p>
-                                                <p className="font-medium text-gray-900">{currentUser.phone}</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                <div className="bg-white rounded-xl border border-gray-200 p-8">
+                    <div className="max-w-xl">
+                        <div className="text-lg font-semibold text-gray-900">Access denied</div>
+                        <div className="mt-2 text-sm text-gray-600">
+                            Your account does not have permission to view team members.
+                        </div>
+                        <div className="mt-4 text-sm text-gray-600">
+                            If you believe this is a mistake, contact an administrator.
                         </div>
                     </div>
                 </div>
@@ -715,7 +618,7 @@ const TeamPage: React.FC<TeamPageProps> = ({
                 ) : (
                     filteredAndSortedUsers.map((user) => {
                         const userStats = getUserStats(user.id, user.email);
-                        
+
                         return (
                             <div
                                 key={user.id}

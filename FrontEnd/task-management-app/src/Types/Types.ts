@@ -1,6 +1,82 @@
 export type TaskStatus = 'in-progress' | 'completed' | 'pending' | 'cancelled' | 'on-hold';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
+// Brand-related types
+export type BrandStatus = 'active' | 'inactive' | 'archived';
+export type BrandRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+export interface Brand {
+    id: string | number;
+    _id?: string;
+    name: string;
+    collaborators: any[];
+    description?: string;
+    logo?: string;
+    company: string;
+    category?: string;
+    website?: string;
+    status: BrandStatus;
+    createdAt: string;
+    updatedAt?: string;
+    createdBy: string;
+    history?: BrandHistory[];
+    tasks?: Task[];
+}
+
+export interface CreateBrandDto {
+    name: string;
+    description: string;
+    company: string;
+    category?: string;
+    website?: string;
+    status: BrandStatus;
+    logo?: string;
+}
+
+export interface UpdateBrandDto extends Partial<CreateBrandDto> { }
+
+export interface BrandCollaborator {
+    id: string;
+    brandId: string;
+    userId: string;
+    email: string;
+    name: string;
+    role: 'owner' | 'admin' | 'editor' | 'viewer';
+    invitedAt: string;
+    joinedAt?: string;
+    invitedBy: string;
+    status: 'pending' | 'accepted' | 'declined';
+    stats?: {
+        assignedTasks: number;
+        completedTasks: number;
+        pendingTasks: number;
+        overdueTasks: number;
+    };
+}
+
+export interface BrandHistory {
+    id: string;
+    brandId: string | number;
+    action: 'brand_created' | 'brand_updated' | 'collaborator_added' | 'collaborator_removed' | 'collaborator_role_changed' | 'collaborator_invited';
+    description: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    userRole: string;
+    timestamp: string;
+    metadata?: Record<string, any>;
+    taskTitle?: string;
+    isTaskHistory?: boolean;
+}
+
+export interface BrandInvite {
+    email: string;
+    role: BrandRole;
+    brandId: string | number;
+    invitedBy: string;
+    message?: string;
+}
+
 // Types/Types.ts file mein Task interface mein add karein:
 export interface Task {
     id: string;
@@ -16,12 +92,14 @@ export interface Task {
     completedApproval?: boolean;
     history?: TaskHistory[];
     comments?: CommentType[];
-
+    assignedByName?: string;  // नया फ़ील्ड
+    assignedToName?: string;
     category?: string;
     tags?: string[];
     type?: string;          // 'regular', 'troubleshoot', 'maintenance', 'development'
     company?: string;       // 'acs', 'md inpex', 'tech solutions', 'global inc'
     brand?: string;         // 'chips', 'soy', 'saffola', etc.
+    brandId?: string | number;
     project?: string;       // Project name
     assignedToUser?: UserType;
 
@@ -175,6 +253,7 @@ export interface NewTaskForm {
     taskType: string;
     companyName: string;
     brand: string;
+    brandId?: string | number;
 }
 
 export type CompanyFilterValue = 'all' | 'company-a' | 'company-b' | 'company-c' | 'company-d';

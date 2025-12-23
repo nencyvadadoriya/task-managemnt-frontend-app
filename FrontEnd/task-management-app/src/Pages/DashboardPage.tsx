@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import {
     LayoutDashboard,
@@ -22,9 +22,6 @@ import {
     Building,
     Tag,
     Edit,
-    Users,
-    Mail,
-    ChevronRight,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -38,22 +35,18 @@ import BrandsListPage from './BrandsListPage';
 import BrandDetailPage from './BrandDetailPage';
 
 import type {
+    Brand,
     CommentType,
     Task,
     TaskHistory,
-    BrandInvite,
     TaskPriority,
     TaskStatus,
     UserType,
-    Brand,
-    BrandCollaborator,
 } from '../Types/Types';
 import { taskService } from '../Services/Task.services';
 import { authService } from '../Services/User.Services';
+import { brandService } from '../Services/Brand.service';
 import { routepath } from '../Routes/route';
-
-// Add brand service import (create this file if doesn't exist)
-// import { brandService } from '../Services/Brand.services';
 
 interface NewTaskForm {
     title: string;
@@ -64,7 +57,6 @@ interface NewTaskForm {
     taskType: string;
     companyName: string;
     brand: string;
-    brandId?: string | number;
 }
 
 interface EditTaskForm {
@@ -77,7 +69,6 @@ interface EditTaskForm {
     taskType: string;
     companyName: string;
     brand: string;
-    brandId?: string | number;
     status: TaskStatus;
 }
 
@@ -99,19 +90,12 @@ interface FilterState {
     date: string;
     taskType: string;
     company: string;
-    brandId?: string | number;
     brand: string;
-}
-
-interface BrandTaskStats {
-    total: number;
-    completed: number;
-    pending: number;
-    overdue: number;
 }
 
 const DashboardPage = () => {
     const navigate = useNavigate();
+    const location = useLocation();
 
     const [tasks, setTasks] = useState<Task[]>([]);
     const [selectedStatFilter, setSelectedStatFilter] = useState<string>('all');
@@ -122,21 +106,17 @@ const DashboardPage = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showLogout, setShowLogout] = useState(false);
     const [users, setUsers] = useState<UserType[]>([]);
-    const [brands, setBrands] = useState<Brand[]>([]);
-    const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
+    const [apiBrands, setApiBrands] = useState<Brand[]>([]);
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [isCreatingTask, setIsCreatingTask] = useState(false);
     const [isUpdatingTask, setIsUpdatingTask] = useState(false);
-    const [currentView, setCurrentView] = useState<'dashboard' | 'all-tasks' | 'calendar' | 'team' | 'profile' | 'brands'>('dashboard');
+    const [currentView, setCurrentView] = useState<'dashboard' | 'all-tasks' | 'calendar' | 'team' | 'profile' | 'brands' | 'brand-detail'>('dashboard');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+    const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
+
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-    const [brandTaskStats, setBrandTaskStats] = useState<Record<string, BrandTaskStats>>({});
-    const [showInviteModal, setShowInviteModal] = useState(false);
-    const [inviteEmail, setInviteEmail] = useState('');
-    const [inviteRole] = useState<'admin' | 'editor' | 'viewer'>('viewer');
-    const [selectedBrandForInvite, setSelectedBrandForInvite] = useState<string | null>(null);
 
     const [currentUser, setCurrentUser] = useState<UserType>({
         id: '',
@@ -160,7 +140,6 @@ const DashboardPage = () => {
         taskType: 'regular',
         companyName: '',
         brand: '',
-        brandId: '',
     });
 
     const [editFormData, setEditFormData] = useState<EditTaskForm>({
@@ -173,7 +152,6 @@ const DashboardPage = () => {
         taskType: 'regular',
         companyName: '',
         brand: '',
-        brandId: '',
         status: 'pending'
     });
 
@@ -189,68 +167,6 @@ const DashboardPage = () => {
         company: 'all',
         brand: 'all',
     });
-
-    const allCompanies = useMemo(() => {
-        const companies = new Set<string>();
-        brands.forEach(brand => {
-            if (brand.company) companies.add(brand.company);
-        });
-        return Array.from(companies);
-    }, [brands]);
-
-    const allBrandsForDropdown = useMemo(() => {
-        return brands.map(brand => ({
-            id: brand.id,
-            name: brand.name,
-            company: brand.company,
-            fullName: `${brand.name} (${brand.company})`
-        }));
-    }, [brands]);
-
-    // const getBrandsByCompany = useCallback((company: string) => {
-    //    return brands.filter(brand => brand.company.toLowerCase() === company.toLowerCase());
-    // }, [brands]);
-
-    const calculateBrandTaskStats = useCallback(() => {
-        const stats: Record<string, BrandTaskStats> = {};
-
-        brands.forEach(brand => {
-            const brandTasks = tasks.filter(task =>
-                task.brand?.toLowerCase() === brand.name.toLowerCase() ||
-                task.companyName?.toLowerCase() === brand.company.toLowerCase()
-            );
-
-            stats[brand.id] = {
-                total: brandTasks.length,
-                completed: brandTasks.filter(t => t.status === 'completed').length,
-                pending: brandTasks.filter(t => t.status !== 'completed').length,
-                overdue: brandTasks.filter(t =>
-                    t.status !== 'completed' &&
-                    new Date(t.dueDate) < new Date()
-                ).length,
-            };
-        });
-
-        return stats;
-    }, [brands, tasks]);
-
-    const canUserAccessBrand = useCallback((brand: Brand) => {
-        if (currentUser.role === 'admin') return true;
-        if (brand.createdBy === currentUser.id) return true;
-        if (brand.collaborators?.some(c => c.userId === currentUser.id)) return true;
-        return false;
-    }, [currentUser]);
-
-    const accessibleBrands = useMemo(() => {
-        return brands.filter(brand => canUserAccessBrand(brand));
-    }, [brands, canUserAccessBrand]);
-
-    const getAvailableBrands = useCallback((companyName: string) => {
-        if (!companyName) return [];
-        return brands
-            .filter(b => b.company.toLowerCase() === companyName.toLowerCase())
-            .map(b => ({ id: b.id, name: b.name }));
-    }, [brands]);
 
     const mainContentClasses = useMemo(() => {
         return `
@@ -268,6 +184,47 @@ const DashboardPage = () => {
         `;
     }, []);
 
+    const DEFAULT_DATA = useMemo(() => ({
+        'ACS': ['ACS Pro', 'ACS Lite', 'ACS Max', 'ACS Elite'],
+        'MD Inpex': ['MD Pro', 'MD Lite', 'MD Max', 'MD Enterprise'],
+        'Tech Solutions': ['Tech Pro', 'Tech Lite', 'Tech Max', 'Tech Premium'],
+        'Global Inc': ['Global Pro', 'Global Lite', 'Global Max', 'Global Enterprise']
+    }), []);
+
+    const brands = useMemo(() => {
+        const result = [...apiBrands];
+
+        Object.entries(DEFAULT_DATA).forEach(([company, brandNames]) => {
+            brandNames.forEach(name => {
+                const exists = result.some(b =>
+                    b.name.toLowerCase() === name.toLowerCase() &&
+                    b.company.toLowerCase() === company.toLowerCase()
+                );
+
+                if (!exists) {
+                    result.push({
+                        id: `default-${company}-${name}`,
+                        name,
+                        company,
+                        status: 'active',
+                        category: 'Demo',
+                        description: `Default brand for ${company}`,
+                        collaborators: [],
+                        createdAt: new Date().toISOString(),
+                        createdBy: 'system'
+                    } as Brand);
+                }
+            });
+        });
+
+        return result;
+    }, [apiBrands, DEFAULT_DATA]);
+
+    const availableCompanies = useMemo(() => {
+        const uniqueCompanies = [...new Set(brands.map(brand => brand.company))];
+        return uniqueCompanies.filter(Boolean).sort();
+    }, [brands]);
+
     const formatDate = useCallback((dateString: string) => {
         try {
             const date = new Date(dateString);
@@ -282,26 +239,53 @@ const DashboardPage = () => {
     }, []);
 
     const navigateTo = (page: string) => {
-        const viewMap: Record<string, 'dashboard' | 'all-tasks' | 'calendar' | 'team' | 'profile' | 'brands'> = {
+        const viewMap: Record<string, 'dashboard' | 'all-tasks' | 'calendar' | 'team' | 'profile' | 'brands' | 'brand-detail'> = {
             'dashboard': 'dashboard',
             'tasks': 'all-tasks',
             'all-tasks': 'all-tasks',
             'calendar': 'calendar',
             'team': 'team',
             'profile': 'profile',
-            'brands': 'brands'
+            'brands': 'brands',
+            'brand-detail': 'brand-detail'
         };
 
         const targetView = viewMap[page];
         if (targetView) {
-            if (targetView === 'brands') {
-                setSelectedBrandId(null);
-            }
             setCurrentView(targetView);
-        } else {
-            console.warn(`Unknown page: ${page}`);
         }
     };
+
+    useEffect(() => {
+        const path = (location.pathname || '').toLowerCase();
+        if (path === routepath.tasks) {
+            setCurrentView('all-tasks');
+            return;
+        }
+        if (path === routepath.calendar) {
+            setCurrentView('calendar');
+            return;
+        }
+        if (path === routepath.team) {
+            setCurrentView('team');
+            return;
+        }
+        if (path === routepath.profile) {
+            setCurrentView('profile');
+            return;
+        }
+        if (path === routepath.brands) {
+            setCurrentView('brands');
+            return;
+        }
+        if (path.startsWith('/brands/')) {
+            setCurrentView('brand-detail');
+            return;
+        }
+        if (path === routepath.dashboard || path === '/') {
+            setCurrentView('dashboard');
+        }
+    }, [location.pathname]);
 
     const isOverdue = useCallback((dueDate: string, status: string) => {
         if (status === 'completed') return false;
@@ -349,67 +333,80 @@ const DashboardPage = () => {
         [currentUser],
     );
 
-    const handleInviteCollaborator = useCallback(async (brandId: string, email: string, role: 'admin' | 'editor' | 'viewer') => {
-        try {
-            const brand = brands.find(b => b.id === brandId);
-            if (!brand) {
-                toast.error('Brand not found');
-                return;
-            }
-
-            const newCollaborator: BrandCollaborator = {
-                id: `collab-${Date.now()}`,
-                brandId,
-                userId: '',
-                email,
-                name: email.split('@')[0],
-                role,
-                invitedAt: new Date().toISOString(),
-                invitedBy: currentUser.id || currentUser.email,
-                status: 'pending'
-            };
-
-            const updatedBrand = {
-                ...brand,
-                collaborators: [...(brand.collaborators || []), newCollaborator],
-                history: [
-                    ...(brand.history || []),
-                    {
-                        id: `hist-${Date.now()}`,
-                        brandId,
-                        action: 'collaborator_invited' as const,
-                        description: `Invited ${email} as ${role}`,
-                        userId: currentUser.id,
-                        userName: currentUser.name,
-                        userEmail: currentUser.email,
-                        userRole: currentUser.role,
-                        timestamp: new Date().toISOString()
-                    }
-                ]
-            };
-
-            setBrands(prev => prev.map(b => b.id === brandId ? updatedBrand : b));
-            toast.success(`Invitation sent to ${email}`);
-            setShowInviteModal(false);
-            setInviteEmail('');
-            setSelectedBrandForInvite(null);
-        } catch (error) {
-            console.error('Error inviting collaborator:', error);
-            toast.error('Failed to send invitation');
+    const handleUpdateUser = useCallback(async (userId: string, updatedData: Partial<UserType>) => {
+        if (currentUser?.role !== 'admin') {
+            throw new Error('Only administrators can edit users');
         }
-    }, [brands, currentUser]);
 
-    // const getBrandCollaborators = useCallback((brandId: string) => {
-    //     const brand = brands.find(b => b.id === brandId);
-    //     return brand?.collaborators || [];
-    // }, [brands]);
+        try {
+            const response = await authService.updateUser(userId, updatedData);
+            if (response.success) {
+                setUsers(prev => prev.map(user => {
+                    const uid = user.id || (user as any)._id;
+                    return uid === userId ? { ...user, ...updatedData } : user;
+                }));
+                return;
+            } else {
+                throw new Error(response.message || 'Failed to update user');
+            }
+        } catch (error: any) {
+            console.error('Error updating user:', error);
+            throw error;
+        }
+    }, [currentUser]);
 
-    // const getBrandTasks = useCallback((brandId: string) => {
-    //     const brand = brands.find(b => b.id === brandId);
-    //     if (!brand) return [];
-    //     return tasks.filter(task => task.brandId === brandId ||
-    //         (task.brand === brand.name && task.companyName === brand.company));
-    // }, [brands, tasks]);
+    const handleCreateUser = useCallback(async (newUser: Partial<UserType>) => {
+        if (currentUser?.role !== 'admin') {
+            throw new Error('Only administrators can create users');
+        }
+
+        try {
+            const payload = {
+                name: newUser.name || '',
+                email: newUser.email || '',
+                password: newUser.password || '',
+                role: (newUser.role as 'admin' | 'user') || 'user',
+                phone: newUser.phone,
+                department: newUser.department,
+                position: newUser.position
+            };
+
+            const response = await authService.createUser(payload);
+
+            if (response.success && response.data) {
+                setUsers(prev => [...prev, response.data as UserType]);
+            } else {
+                throw new Error(response.message || 'Failed to create user');
+            }
+        } catch (error: any) {
+            console.error('Error creating user:', error);
+            throw error;
+        }
+    }, [currentUser]);
+
+    const handleDeleteUser = useCallback(async (userId: string) => {
+        if (currentUser?.role !== 'admin') {
+            throw new Error('Only administrators can delete users');
+        }
+
+        if (userId === currentUser.id) {
+            throw new Error('You cannot delete your own account');
+        }
+
+        try {
+            const response = await authService.deleteUser(userId);
+            const isSuccess = response && (response.success === true || !response.error);
+
+            if (isSuccess) {
+                setUsers(prev => prev.filter(user => (user.id || (user as any)._id) !== userId));
+            } else {
+                throw new Error(response?.message || 'Failed to delete user');
+            }
+        } catch (error: any) {
+            console.error('Error deleting user:', error);
+            throw error;
+        }
+    }, [currentUser]);
 
     const getAssignedUserInfo = useCallback(
         (task: Task): { name: string; email: string } => {
@@ -423,8 +420,8 @@ const DashboardPage = () => {
             if (task.assignedTo) {
                 if (typeof task.assignedTo === 'object') {
                     return {
-                        name: (task.assignedTo as any).name || 'User',
-                        email: (task.assignedTo as any).email,
+                        name: task.assignedTo.name || 'User',
+                        email: task.assignedTo.email,
                     };
                 }
 
@@ -449,6 +446,25 @@ const DashboardPage = () => {
         },
         [users],
     );
+
+    const getAvailableBrands = useCallback(() => {
+        const company = newTask.companyName;
+        if (!company) return [];
+
+        return brands
+            .filter(brand => brand.company.toLowerCase() === company.toLowerCase())
+            .map(brand => brand.name)
+            .sort();
+    }, [newTask.companyName, brands]);
+
+    const getEditFormAvailableBrands = useCallback(() => {
+        const company = editFormData.companyName;
+        if (!company) return [];
+
+        return brands
+            .filter(brand => brand.company.toLowerCase() === company.toLowerCase())
+            .map(brand => brand.name);
+    }, [editFormData.companyName, brands]);
 
     const handleSaveComment = useCallback(async (taskId: string, comment: string): Promise<CommentType> => {
         try {
@@ -730,6 +746,151 @@ const DashboardPage = () => {
         }
     }, []);
 
+    const getFilteredTasksByStat = useCallback(() => {
+        if (!currentUser?.email) return [];
+
+        let filtered = tasks.filter((task) => {
+            if (currentUser.role === 'admin') return true;
+            return task.assignedTo === currentUser.email || task.assignedBy === currentUser.email;
+        });
+
+        if (selectedStatFilter === 'completed') {
+            filtered = filtered.filter((task) => task.status === 'completed');
+        } else if (selectedStatFilter === 'pending') {
+            filtered = filtered.filter((task) => task.status !== 'completed');
+        } else if (selectedStatFilter === 'overdue') {
+            filtered = filtered.filter((task) => task.status !== 'completed' && isOverdue(task.dueDate, task.status));
+        }
+
+        if (filters.status !== 'all') {
+            filtered = filtered.filter((task) => task.status === filters.status);
+        }
+
+        if (filters.priority !== 'all') {
+            filtered = filtered.filter((task) => task.priority === filters.priority);
+        }
+
+        if (filters.taskType !== 'all') {
+            const filterType = filters.taskType.toLowerCase();
+            filtered = filtered.filter((task) => {
+                const taskType = (task.taskType || (task as any).type || '').toLowerCase();
+                return taskType === filterType;
+            });
+        }
+
+        if (filters.company !== 'all') {
+            const filterCompany = filters.company.toLowerCase();
+            filtered = filtered.filter((task) => {
+                const taskCompany = (task.companyName || (task as any).company || '').toLowerCase();
+                return taskCompany === filterCompany;
+            });
+        }
+
+        if (filters.brand !== 'all') {
+            const filterBrand = filters.brand.toLowerCase();
+            filtered = filtered.filter((task) => {
+                const taskBrand = (task.brand || '').toLowerCase();
+                return taskBrand === filterBrand;
+            });
+        }
+
+        if (filters.date === 'today') {
+            filtered = filtered.filter((task) => new Date(task.dueDate).toDateString() === new Date().toDateString());
+        } else if (filters.date === 'week') {
+            filtered = filtered.filter((task) => {
+                const taskDate = new Date(task.dueDate);
+                const today = new Date();
+                const nextWeek = new Date(today);
+                nextWeek.setDate(today.getDate() + 7);
+                return taskDate >= today && taskDate <= nextWeek;
+            });
+        } else if (filters.date === 'overdue') {
+            filtered = filtered.filter((task) => isOverdue(task.dueDate, task.status));
+        }
+
+        if (filters.assigned === 'assigned-to-me') {
+            filtered = filtered.filter((task) => task.assignedTo === currentUser.email);
+        } else if (filters.assigned === 'assigned-by-me') {
+            filtered = filtered.filter((task) => task.assignedBy === currentUser.email);
+        }
+
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter((task) => {
+                const title = (task.title || '').toLowerCase();
+                const description = (task.description || '').toLowerCase();
+                const company = (task.companyName || (task as any).company || '').toLowerCase();
+                const brand = (task.brand || '').toLowerCase();
+                const typeVal = (task.taskType || (task as any).type || '').toLowerCase();
+                return (
+                    title.includes(term) ||
+                    description.includes(term) ||
+                    company.includes(term) ||
+                    brand.includes(term) ||
+                    typeVal.includes(term)
+                );
+            });
+        }
+
+        return filtered;
+    }, [currentUser, filters, isOverdue, searchTerm, selectedStatFilter, tasks]);
+
+    const displayTasks = useMemo(() => getFilteredTasksByStat(), [getFilteredTasksByStat]);
+
+    const stats: StatMeta[] = useMemo(() => {
+        const userTasks = tasks.filter(task => {
+            if (currentUser.role === 'admin') return true;
+            return task.assignedTo === currentUser.email || task.assignedBy === currentUser.email;
+        });
+
+        const completedTasks = userTasks.filter((t) => t.status === 'completed');
+        const pendingTasks = userTasks.filter((t) => t.status !== 'completed');
+        const overdueTasks = userTasks.filter((t) => isOverdue(t.dueDate, t.status));
+
+        return [
+            {
+                name: 'Total Tasks',
+                value: userTasks.length,
+                change: '+12%',
+                changeType: 'positive',
+                icon: BarChart3,
+                id: 'total',
+                color: 'text-blue-600',
+                bgColor: 'bg-blue-50',
+            },
+            {
+                name: 'Completed',
+                value: completedTasks.length,
+                change: '+8%',
+                changeType: 'positive',
+                icon: CheckCircle,
+                id: 'completed',
+                color: 'text-emerald-600',
+                bgColor: 'bg-emerald-50',
+            },
+            {
+                name: 'Pending',
+                value: pendingTasks.length,
+                change: '-3%',
+                changeType: 'negative',
+                icon: Clock,
+                id: 'pending',
+                color: 'text-amber-600',
+                bgColor: 'bg-amber-50',
+            },
+            {
+                name: 'Overdue',
+                value: overdueTasks.length,
+                change: '+5%',
+                changeType: 'negative',
+                icon: AlertCircle,
+                id: 'overdue',
+                color: 'text-rose-600',
+                bgColor: 'bg-rose-50',
+            }
+        ];
+    }, [isOverdue, tasks, currentUser]);
+
     const getPriorityColor = useCallback((priority: TaskPriority) => {
         switch (priority) {
             case 'high': return 'border-red-300 bg-red-50 text-red-700';
@@ -824,18 +985,9 @@ const DashboardPage = () => {
             setNewTask(prev => ({
                 ...prev,
                 brand: '',
-                brandId: '',
             }));
-        } else if (field === 'brand') {
-            const selectedBrand = allBrandsForDropdown.find(b => b.name === value);
-            if (selectedBrand) {
-                setNewTask(prev => ({
-                    ...prev,
-                    brandId: selectedBrand.id,
-                }));
-            }
         }
-    }, [formErrors, allBrandsForDropdown]);
+    }, [formErrors]);
 
     const handleEditInputChange = useCallback((field: keyof EditTaskForm, value: string) => {
         setEditFormData(prev => ({
@@ -855,18 +1007,9 @@ const DashboardPage = () => {
             setEditFormData(prev => ({
                 ...prev,
                 brand: '',
-                brandId: '',
             }));
-        } else if (field === 'brand') {
-            const selectedBrand = allBrandsForDropdown.find(b => b.name === value);
-            if (selectedBrand) {
-                setEditFormData(prev => ({
-                    ...prev,
-                    brandId: selectedBrand.id,
-                }));
-            }
         }
-    }, [editFormErrors, allBrandsForDropdown]);
+    }, [editFormErrors]);
 
     const validateForm = useCallback(() => {
         const errors: Record<string, string> = {};
@@ -892,6 +1035,16 @@ const DashboardPage = () => {
             if (selectedDate < yesterday) {
                 errors.dueDate = 'Due date cannot be in the past';
             }
+        }
+
+        // Company validation
+        if (!newTask.companyName || newTask.companyName.trim() === '') {
+            errors.companyName = 'Company is required';
+        }
+
+        // Brand validation
+        if (!newTask.brand || newTask.brand.trim() === '') {
+            errors.brand = 'Brand is required';
         }
 
         setFormErrors(errors);
@@ -978,6 +1131,17 @@ const DashboardPage = () => {
         }
     }, []);
 
+    const fetchBrands = useCallback(async () => {
+        try {
+            const response = await brandService.getBrands();
+            if (response && response.data) {
+                setApiBrands(response.data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch brands:', error);
+        }
+    }, []);
+
     const fetchCurrentUser = useCallback(async () => {
         try {
             const token = localStorage.getItem('token');
@@ -998,280 +1162,6 @@ const DashboardPage = () => {
         }
     }, [navigate]);
 
-    const handleUpdateUser = useCallback(async (userId: string, userData: Partial<UserType>) => {
-        try {
-            const response = await authService.updateUser(userId, userData);
-            if (response.success) {
-                setUsers(prev => prev.map(user =>
-                    user.id === userId ? { ...user, ...userData } : user
-                ));
-                toast.success('User updated successfully');
-            } else {
-                toast.error(response.message || 'Failed to update user');
-            }
-        } catch (error) {
-            console.error('Error updating user:', error);
-            toast.error('Failed to update user');
-        }
-    }, []);
-
-    const handleDeleteUser = useCallback(async (userId: string) => {
-        try {
-            const response = await authService.deleteUser(userId);
-            if (response.success) {
-                setUsers(prev => prev.filter(user => user.id !== userId));
-                toast.success('User deleted successfully');
-            } else {
-                toast.error(response.message || 'Failed to delete user');
-            }
-        } catch (error) {
-            console.error('Error deleting user:', error);
-            toast.error('Failed to delete user');
-        }
-    }, []);
-
-    const handleCreateUser = useCallback(async (userData: Partial<UserType>): Promise<void> => {
-        try {
-            const userToCreate = {
-                ...userData,
-                password: userData.password || '123456',
-                name: userData.name || '',
-                email: userData.email || '',
-                role: userData.role || 'viewer'
-            };
-
-            const response = await authService.createUser(userToCreate);
-
-            if (response.success && response.data) {
-                const newUser = {
-                    ...response.data,
-                    id: response.data.id || response.data._id || `user-${Date.now()}`
-                } as UserType;
-
-                setUsers(prev => [...prev, newUser]);
-                toast.success('User created successfully');
-                // ✅ कोई value return मत करो
-                return;
-            } else {
-                toast.error(response.message || 'Failed to create user');
-                // ✅ Ya error throw करो
-                throw new Error(response.message || 'Failed to create user');
-            }
-        } catch (error) {
-            console.error('Error creating user:', error);
-            toast.error('Failed to create user');
-            // ✅ Error re-throw करो
-            throw error;
-        }
-    }, []);
-
-    const fetchBrands = useCallback(async () => {
-        try {
-            // Create comprehensive mock brands data
-            const mockBrands: Brand[] = [
-                {
-                    id: 'brand-acs-chips',
-                    name: 'Chips',
-                    company: 'ACS',
-                    description: 'Premium snack chips brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [
-                    ],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-acs-soy',
-                    name: 'Soy',
-                    company: 'ACS',
-                    description: 'Soy products brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-acs-saffola',
-                    name: 'Saffola',
-                    company: 'ACS',
-                    description: 'Healthy oil brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-acs-lays',
-                    name: 'Lays',
-                    company: 'ACS',
-                    description: 'Potato chips brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-acs-pepsi',
-                    name: 'Pepsi',
-                    company: 'ACS',
-                    description: 'Soft drink brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-acs-7up',
-                    name: '7Up',
-                    company: 'ACS',
-                    description: 'Lemon-lime soda brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-md-inpex-inpex-pro',
-                    name: 'Inpex Pro',
-                    company: 'MD Inpex',
-                    description: 'Professional tools brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id,
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-md-inpex-inpex-lite',
-                    name: 'Inpex Lite',
-                    company: 'MD Inpex',
-                    description: 'Lightweight tools brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-md-inpex-inpex-max',
-                    name: 'Inpex Max',
-                    company: 'MD Inpex',
-                    description: 'Heavy duty tools brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-tech-solutions-techx',
-                    name: 'TechX',
-                    company: 'Tech Solutions',
-                    description: 'Technology solutions brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-tech-solutions-techpro',
-                    name: 'TechPro',
-                    company: 'Tech Solutions',
-                    description: 'Professional tech brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-tech-solutions-techlite',
-                    name: 'TechLite',
-                    company: 'Tech Solutions',
-                    description: 'Basic tech brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-global-inc-premium',
-                    name: 'Premium',
-                    company: 'Global Inc',
-                    description: 'Premium services brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-global-inc-enterprise',
-                    name: 'Enterprise',
-                    company: 'Global Inc',
-                    description: 'Enterprise solutions brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                },
-                {
-                    id: 'brand-global-inc-standard',
-                    name: 'Standard',
-                    company: 'Global Inc',
-                    description: 'Standard services brand',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    createdBy: currentUser.id || 'system',
-                    collaborators: [],
-                    history: [],
-                    tasks: []
-                }
-            ];
-            setBrands(mockBrands);
-        } catch (error) {
-            console.error('Failed to fetch brands:', error);
-        }
-    }, [currentUser.id]);
-
     useEffect(() => {
         fetchCurrentUser();
         fetchTasks();
@@ -1284,224 +1174,13 @@ const DashboardPage = () => {
         }
     }, [fetchCurrentUser, fetchTasks, fetchUsers, fetchBrands]);
 
-    useEffect(() => {
-        const stats = calculateBrandTaskStats();
-        setBrandTaskStats(stats);
-    }, [brands, tasks, calculateBrandTaskStats]);
-
-    const isTaskVisibleToCurrentUser = useCallback((task: Task) => {
-        if (currentUser.role === 'admin') return true;
-        if (!currentUser.email) return false;
-
-        if (task.assignedTo === currentUser.email || task.assignedBy === currentUser.email) return true;
-
-        const company = (task.companyName || '').toString();
-        const brandName = (task.brand || '').toString();
-        if (!company.trim() || !brandName.trim()) return false;
-
-        return true;
-    }, [currentUser.email, currentUser.role]);
-
-    const visibleTasks = useMemo(() => {
-        return tasks.filter(isTaskVisibleToCurrentUser);
-    }, [isTaskVisibleToCurrentUser, tasks]);
-
-    const getFilteredTasksByStat = useCallback(() => {
-        if (!currentUser?.email) return [];
-
-        let filtered = [...visibleTasks];
-
-        if (selectedStatFilter === 'completed') {
-            filtered = filtered.filter((task) => task.status === 'completed');
-        } else if (selectedStatFilter === 'pending') {
-            filtered = filtered.filter((task) => task.status !== 'completed');
-        } else if (selectedStatFilter === 'overdue') {
-            filtered = filtered.filter((task) => isOverdue(task.dueDate, task.status));
-        }
-
-        if (filters.status !== 'all') {
-            filtered = filtered.filter((task) => task.status === filters.status);
-        }
-
-        if (filters.priority !== 'all') {
-            filtered = filtered.filter((task) => task.priority === filters.priority);
-        }
-
-        if (filters.taskType !== 'all') {
-            const filterType = filters.taskType.toLowerCase();
-            filtered = filtered.filter((task) => {
-                const taskType = (task.taskType || '').toLowerCase();
-                return taskType === filterType;
-            });
-        }
-
-        if (filters.company !== 'all') {
-            const filterCompany = filters.company.toLowerCase();
-            filtered = filtered.filter((task) => {
-                const taskCompany = (task.companyName || '').toLowerCase();
-                return taskCompany === filterCompany;
-            });
-        }
-
-        if (filters.brand !== 'all') {
-            const filterBrand = filters.brand.toLowerCase();
-            filtered = filtered.filter((task) => {
-                const taskBrand = (task.brand || '').toLowerCase();
-                return taskBrand === filterBrand;
-            });
-        }
-
-        if (filters.date === 'today') {
-            filtered = filtered.filter((task) => new Date(task.dueDate).toDateString() === new Date().toDateString());
-        } else if (filters.date === 'week') {
-            filtered = filtered.filter((task) => {
-                const taskDate = new Date(task.dueDate);
-                const today = new Date();
-                const nextWeek = new Date(today);
-                nextWeek.setDate(today.getDate() + 7);
-                return taskDate >= today && taskDate <= nextWeek;
-            });
-        } else if (filters.date === 'overdue') {
-            filtered = filtered.filter((task) => isOverdue(task.dueDate, task.status));
-        }
-
-        if (filters.assigned === 'assigned-to-me') {
-            filtered = filtered.filter((task) => task.assignedTo === currentUser.email);
-        } else if (filters.assigned === 'assigned-by-me') {
-            filtered = filtered.filter((task) => task.assignedBy === currentUser.email);
-        }
-
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            filtered = filtered.filter((task) => {
-                const title = (task.title || '').toLowerCase();
-                const description = (task.description || '').toLowerCase();
-                const company = (task.companyName || '').toLowerCase();
-                const brand = (task.brand || '').toLowerCase();
-                const typeVal = (task.taskType || '').toLowerCase();
-                return (
-                    title.includes(term) ||
-                    description.includes(term) ||
-                    company.includes(term) ||
-                    brand.includes(term) ||
-                    typeVal.includes(term)
-                );
-            });
-        }
-
-        return filtered;
-    }, [currentUser, filters, isOverdue, searchTerm, selectedStatFilter, visibleTasks]);
-
-    const displayTasks = useMemo(() => getFilteredTasksByStat(), [getFilteredTasksByStat]);
-
-    const stats: StatMeta[] = useMemo(() => {
-        const userTasks = visibleTasks;
-
-        const completedTasks = userTasks.filter((t) => t.status === 'completed');
-        const pendingTasks = userTasks.filter((t) => t.status !== 'completed');
-        const overdueTasks = userTasks.filter((t) => isOverdue(t.dueDate, t.status));
-
-        return [
-            {
-                name: 'Total Tasks',
-                value: userTasks.length,
-                change: '+12%',
-                changeType: 'positive',
-                icon: BarChart3,
-                id: 'total',
-                color: 'text-blue-600',
-                bgColor: 'bg-blue-50',
-            },
-            {
-                name: 'Completed',
-                value: completedTasks.length,
-                change: '+8%',
-                changeType: 'positive',
-                icon: CheckCircle,
-                id: 'completed',
-                color: 'text-emerald-600',
-                bgColor: 'bg-emerald-50',
-            },
-            {
-                name: 'Pending',
-                value: pendingTasks.length,
-                change: '-3%',
-                changeType: 'negative',
-                icon: Clock,
-                id: 'pending',
-                color: 'text-amber-600',
-                bgColor: 'bg-amber-50',
-            },
-            {
-                name: 'Overdue',
-                value: overdueTasks.length,
-                change: '+5%',
-                changeType: 'negative',
-                icon: AlertCircle,
-                id: 'overdue',
-                color: 'text-rose-600',
-                bgColor: 'bg-rose-50',
-            }
-        ];
-    }, [isOverdue, visibleTasks]);
-
-    const handleInviteCollaboratorToBrand = useCallback((invite: BrandInvite) => {
-        const now = new Date().toISOString();
-        const user = users.find(u => u.email === invite.email);
-
-        setBrands(prev => prev.map(b => {
-            if (b.id !== invite.brandId) return b;
-
-            const existing = b.collaborators?.some(c => c.email === invite.email);
-            if (existing) {
-                toast.error('This member is already added to the brand');
-                return b;
-            }
-
-            const collaborator: BrandCollaborator = {
-                id: `collab-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-                brandId: String(b.id),
-                userId: user?.id || 'user',
-                email: invite.email,
-                name: user?.name || invite.email.split('@')[0] || 'Member',
-                role: invite.role === 'owner' ? 'owner' :
-                    invite.role === 'admin' ? 'admin' :
-                        'viewer',
-                invitedAt: now,
-                invitedBy: currentUser.id || 'user',
-                status: 'pending',
-            };
-
-            const historyItem = {
-                id: `hist-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-                brandId: b.id,
-                action: 'collaborator_added',
-                description: `Collaborator ${invite.email} added`,
-                userId: currentUser.id || 'user',
-                userName: currentUser.name || 'User',
-                userEmail: currentUser.email || 'user@example.com',
-                userRole: currentUser.role || 'user',
-                timestamp: now,
-            };
-
-            return {
-                ...b,
-                updatedAt: now,
-                collaborators: [...(b.collaborators || []), collaborator],
-                history: [historyItem as any, ...(b.history || [])],
-            };
-        }));
-
-        toast.success('Collaborator added to brand');
-    }, [currentUser.email, currentUser.id, currentUser.name, currentUser.role, users]);
-
     const getAssignedToValue = (assignedTo: any): string => {
         if (!assignedTo) return '';
 
         if (typeof assignedTo === 'string') return assignedTo;
 
         if (typeof assignedTo === 'object' && assignedTo !== null) {
-            return (assignedTo as any).email || (assignedTo as any).name || '';
+            return assignedTo.email || assignedTo.name || '';
         }
 
         return '';
@@ -1522,7 +1201,6 @@ const DashboardPage = () => {
             taskType: task.taskType || 'regular',
             companyName: task.companyName || '',
             brand: task.brand || '',
-            brandId: (task as any).brandId || '',
             status: task.status || 'pending'
         });
 
@@ -1536,6 +1214,11 @@ const DashboardPage = () => {
 
         setIsCreatingTask(true);
         try {
+            // Find the brand object to get the real brandId if it exists
+            const selectedBrandObj = brands.find(b =>
+                b.name === newTask.brand && (b.company === newTask.companyName || (b as any).companyName === newTask.companyName)
+            );
+
             const taskData = {
                 title: newTask.title,
                 description: newTask.description,
@@ -1545,7 +1228,7 @@ const DashboardPage = () => {
                 taskType: newTask.taskType,
                 companyName: newTask.companyName,
                 brand: newTask.brand,
-                brandId: newTask.brandId,
+                brandId: selectedBrandObj?.id || selectedBrandObj?._id,
                 status: 'pending' as TaskStatus,
                 assignedBy: currentUser.email,
                 assignedToUser: users.find(u => u.email === newTask.assignedTo),
@@ -1564,7 +1247,6 @@ const DashboardPage = () => {
                     taskType: 'regular',
                     companyName: '',
                     brand: '',
-                    brandId: '',
                 });
                 toast.success('Task created successfully!');
             } else {
@@ -1639,6 +1321,11 @@ const DashboardPage = () => {
 
         setIsUpdatingTask(true);
         try {
+            // Find the brand object to get the real brandId if it exists
+            const selectedBrandObj = brands.find(b =>
+                b.name === editFormData.brand && (b.company === editFormData.companyName || (b as any).companyName === editFormData.companyName)
+            );
+
             const updateData = {
                 title: editFormData.title,
                 description: editFormData.description,
@@ -1648,7 +1335,7 @@ const DashboardPage = () => {
                 taskType: editFormData.taskType,
                 companyName: editFormData.companyName,
                 brand: editFormData.brand,
-                brandId: editFormData.brandId,
+                brandId: selectedBrandObj?.id || selectedBrandObj?._id,
                 status: editFormData.status,
                 assignedBy: editingTask.assignedBy,
                 assignedToUser: users.find(u => u.email === editFormData.assignedTo),
@@ -1673,18 +1360,20 @@ const DashboardPage = () => {
                     };
 
                     try {
-                        await handleAddTaskHistory(
-                            editingTask.id,
-                            {
-                                taskId: editingTask.id,
-                                action: 'task_edited',
-                                description: `Task edited by ${safeUser.role} (${safeUser.name}): ${changeDescription}`,
-                                userId: safeUser.id,
-                                userName: safeUser.name,
-                                userEmail: safeUser.email,
-                                userRole: safeUser.role,
-                            }
-                        );
+                        if (handleAddTaskHistory) {
+                            await handleAddTaskHistory(
+                                editingTask.id,
+                                {
+                                    taskId: editingTask.id,
+                                    action: 'task_edited',
+                                    description: `Task edited by ${safeUser.role} (${safeUser.name}): ${changeDescription}`,
+                                    userId: safeUser.id,
+                                    userName: safeUser.name,
+                                    userEmail: safeUser.email,
+                                    userRole: safeUser.role,
+                                }
+                            );
+                        }
                     } catch (error) {
                         console.error('Error adding edit history:', error);
                     }
@@ -1702,7 +1391,6 @@ const DashboardPage = () => {
                     taskType: 'regular',
                     companyName: '',
                     brand: '',
-                    brandId: '',
                     status: 'pending'
                 });
 
@@ -1734,9 +1422,8 @@ const DashboardPage = () => {
                         dueDate: payload.dueDate,
                         priority: payload.priority,
                         taskType: payload.taskType || 'regular',
-                        companyName: payload.companyName || '',
+                        companyName: payload.companyName || 'company name',
                         brand: payload.brand || '',
-                        brandId: payload.brandId || '',
                         status: 'pending' as TaskStatus,
                         assignedBy: currentUser.email,
                         assignedToUser: users.find(u => u.email === payload.assignedTo),
@@ -1772,7 +1459,7 @@ const DashboardPage = () => {
 
             return { created, failures };
         },
-        [currentUser.email, users]
+        [currentUser.email, users, setTasks]
     );
 
     const updateTaskInState = useCallback((updatedTask: Task) => {
@@ -1785,7 +1472,7 @@ const DashboardPage = () => {
                 }
                 : task
         ));
-    }, []);
+    }, [setTasks]);
 
     const handleToggleTaskStatus = useCallback(async (
         taskId: string,
@@ -1909,107 +1596,6 @@ const DashboardPage = () => {
         }
     }, [tasks, canEditDeleteTask, updateTaskInState]);
 
-    // Render brand section in dashboard
-    const renderBrandsSection = () => {
-        if (!accessibleBrands.length) return null;
-
-        return (
-            <div className="mt-10">
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Brands</h2>
-                        <p className="text-gray-600 mt-1">Manage your brands and their tasks</p>
-                    </div>
-                    <button
-                        onClick={() => setCurrentView('brands')}
-                        className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 flex items-center gap-2"
-                    >
-                        View All Brands
-                        <ChevronRight className="h-4 w-4" />
-                    </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {accessibleBrands.slice(0, 6).map((brand) => (
-                        <div
-                            key={brand.id}
-                            className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow"
-                        >
-                            <div className="flex items-start justify-between mb-4">
-                                <div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-12 h-12 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold">
-                                            {brand.name.charAt(0)}
-                                        </div>
-                                        <div>
-                                            <h3 className="font-semibold text-gray-900">{brand.name}</h3>
-                                            <p className="text-sm text-gray-500">{brand.company}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setSelectedBrandId(String(brand.id))}
-                                    className="text-blue-600 hover:text-blue-800"
-                                >
-                                    <ChevronRight className="h-5 w-5" />
-                                </button>
-                            </div>
-
-                            <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-                                {brand.description || 'No description'}
-                            </p>
-
-                            <div className="grid grid-cols-2 gap-3 mb-4">
-                                <div className="bg-gray-50 rounded-lg p-3 text-center">
-                                    <div className="text-lg font-bold text-gray-900">
-                                        {brandTaskStats[brand.id]?.total || 0}
-                                    </div>
-                                    <div className="text-xs text-gray-500">Total Tasks</div>
-                                </div>
-                                <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                                    <div className="text-lg font-bold text-emerald-700">
-                                        {brandTaskStats[brand.id]?.completed || 0}
-                                    </div>
-                                    <div className="text-xs text-emerald-600">Completed</div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                                <div className="flex items-center gap-2">
-                                    <Users className="h-4 w-4 text-gray-400" />
-                                    <span className="text-xs text-gray-500">
-                                        {brand.collaborators?.length || 0} members
-                                    </span>
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        setSelectedBrandForInvite(String(brand.id));
-                                        setShowInviteModal(true);
-                                    }}
-                                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                                >
-                                    <Mail className="h-3 w-3" />
-                                    Invite
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {accessibleBrands.length > 6 && (
-                    <div className="text-center mt-6">
-                        <button
-                            onClick={() => setCurrentView('brands')}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                        >
-                            View {accessibleBrands.length - 6} more brands
-                        </button>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
     if (loading) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex">
@@ -2065,7 +1651,7 @@ const DashboardPage = () => {
                                         <div>
                                             <div className="flex items-center gap-3 mb-2">
                                                 <div className="h-8 w-8 bg-gray-300 rounded-xl"></div>
-                                                <div className="h-6 w-32 bg-gray-400 rounded"></div>
+                                                <div className="h-8 w-48 bg-gray-400 rounded"></div>
                                             </div>
                                             <div className="h-4 w-64 bg-gray-300 rounded"></div>
                                         </div>
@@ -2353,7 +1939,7 @@ const DashboardPage = () => {
                                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                                     >
                                                         <option value="all">All Companies</option>
-                                                        {allCompanies.map(company => (
+                                                        {availableCompanies.map(company => (
                                                             <option key={company} value={company.toLowerCase()}>
                                                                 {company}
                                                             </option>
@@ -2371,9 +1957,9 @@ const DashboardPage = () => {
                                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                                     >
                                                         <option value="all">All Brands</option>
-                                                        {allBrandsForDropdown.map(brand => (
+                                                        {brands.map(brand => (
                                                             <option key={brand.id} value={brand.name.toLowerCase()}>
-                                                                {brand.fullName}
+                                                                {brand.name}
                                                             </option>
                                                         ))}
                                                     </select>
@@ -2530,147 +2116,169 @@ const DashboardPage = () => {
                                         </div>
                                     ) : viewMode === 'grid' ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            {displayTasks.map((task: Task) => (
-                                                <div
-                                                    key={task.id}
-                                                    className="group bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-lg transition-all duration-200 hover:-translate-y-1 relative"
-                                                >
-                                                    <div className="flex justify-between items-start mb-4">
-                                                        <div className="flex-1">
-                                                            <div className="flex items-center gap-2 mb-3">
-                                                                <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getPriorityColor(task.priority || 'medium')}`}>
-                                                                    <span className="flex items-center gap-1">
-                                                                        <Flag className="h-3 w-3" />
-                                                                        {task.priority}
-                                                                    </span>
-                                                                </span>
-                                                                <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(task.status)}`}>
-                                                                    {task.status}
-                                                                    {task.completedApproval && (
-                                                                        <span className="ml-1 text-blue-500">✅</span>
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                            <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
-                                                                {task.title}
-                                                                {task.completedApproval && (
-                                                                    <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full">
-                                                                        Approved
-                                                                    </span>
-                                                                )}
-                                                            </h3>
-                                                            <p className="text-sm text-gray-500 line-clamp-2 mb-3">
-                                                                {task.description || 'No description provided'}
-                                                            </p>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => setOpenMenuId(openMenuId === task.id ? null : task.id)}
-                                                            className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1.5 rounded-lg"
-                                                        >
-                                                            <MoreVertical className="h-5 w-5" />
-                                                        </button>
-                                                    </div>
+                                            {displayTasks
+                                                .filter((task: Task) => {
+                                                    if (filters.taskType !== 'all') {
+                                                        const filterType = filters.taskType.toLowerCase();
+                                                        const taskType = (task.taskType || (task as any).type || '').toLowerCase();
+                                                        if (taskType !== filterType) return false;
+                                                    }
 
-                                                    <div className="space-y-3 mb-5">
-                                                        <div className="flex items-center justify-between text-sm">
-                                                            <span className="text-gray-500 flex items-center gap-2">
-                                                                <UserCheck className="h-4 w-4" />
-                                                                Assigned To
-                                                            </span>
-                                                            <span className="font-medium text-gray-900">
-                                                                {getAssignedUserInfo(task).name}
-                                                            </span>
+                                                    if (filters.company !== 'all') {
+                                                        const filterCompany = filters.company.toLowerCase();
+                                                        const taskCompany = (task.companyName || (task as any).company || '').toLowerCase();
+                                                        if (taskCompany !== filterCompany) return false;
+                                                    }
+
+                                                    if (filters.brand !== 'all') {
+                                                        const filterBrand = filters.brand.toLowerCase();
+                                                        const taskBrand = (task.brand || '').toLowerCase();
+                                                        if (taskBrand !== filterBrand) return false;
+                                                    }
+
+                                                    return true;
+                                                })
+                                                .map((task: Task) => (
+                                                    <div
+                                                        key={task.id}
+                                                        className="group bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-lg transition-all duration-200 hover:-translate-y-1 relative"
+                                                    >
+                                                        <div className="flex justify-between items-start mb-4">
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-3">
+                                                                    <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getPriorityColor(task.priority || 'medium')}`}>
+                                                                        <span className="flex items-center gap-1">
+                                                                            <Flag className="h-3 w-3" />
+                                                                            {task.priority}
+                                                                        </span>
+                                                                    </span>
+                                                                    <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(task.status)}`}>
+                                                                        {task.status}
+                                                                        {task.completedApproval && (
+                                                                            <span className="ml-1 text-blue-500">✅</span>
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                                <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+                                                                    {task.title}
+                                                                    {task.completedApproval && (
+                                                                        <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full">
+                                                                            Approved
+                                                                        </span>
+                                                                    )}
+                                                                </h3>
+                                                                <p className="text-sm text-gray-500 line-clamp-2 mb-3">
+                                                                    {task.description || 'No description provided'}
+                                                                </p>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => setOpenMenuId(openMenuId === task.id ? null : task.id)}
+                                                                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1.5 rounded-lg"
+                                                            >
+                                                                <MoreVertical className="h-5 w-5" />
+                                                            </button>
                                                         </div>
-                                                        <div className="flex items-center justify-between text-sm">
-                                                            <span className="text-gray-500 flex items-center gap-2">
-                                                                <CalendarDays className="h-4 w-4" />
-                                                                Due Date
-                                                            </span>
-                                                            <span className={`font-medium ${isOverdue(task.dueDate, task.status)
-                                                                ? 'text-rose-600'
-                                                                : 'text-gray-900'
-                                                                }`}>
-                                                                {formatDate(task.dueDate)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between text-sm">
-                                                            <span className="text-gray-500 flex items-center gap-2">
-                                                                <Building className="h-4 w-4" />
-                                                                Company
-                                                            </span>
-                                                            <span className={`px-2 py-1 text-xs rounded-full border ${getCompanyColor(task.companyName)}`}>
-                                                                {task.companyName}
-                                                            </span>
-                                                        </div>
-                                                        {task.brand && (
+
+                                                        <div className="space-y-3 mb-5">
                                                             <div className="flex items-center justify-between text-sm">
                                                                 <span className="text-gray-500 flex items-center gap-2">
-                                                                    <Tag className="h-4 w-4" />
-                                                                    Brand
+                                                                    <UserCheck className="h-4 w-4" />
+                                                                    Assigned To
                                                                 </span>
-                                                                <span className={`px-2 py-1 text-xs rounded-full border ${getBrandColor(task.brand)}`}>
-                                                                    {task.brand}
+                                                                <span className="font-medium text-gray-900">
+                                                                    {getAssignedUserInfo(task).name}
                                                                 </span>
                                                             </div>
-                                                        )}
-                                                    </div>
+                                                            <div className="flex items-center justify-between text-sm">
+                                                                <span className="text-gray-500 flex items-center gap-2">
+                                                                    <CalendarDays className="h-4 w-4" />
+                                                                    Due Date
+                                                                </span>
+                                                                <span className={`font-medium ${isOverdue(task.dueDate, task.status)
+                                                                    ? 'text-rose-600'
+                                                                    : 'text-gray-900'
+                                                                    }`}>
+                                                                    {formatDate(task.dueDate)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between text-sm">
+                                                                <span className="text-gray-500 flex items-center gap-2">
+                                                                    <Building className="h-4 w-4" />
+                                                                    Company
+                                                                </span>
+                                                                <span className={`px-2 py-1 text-xs rounded-full border ${getCompanyColor(task.companyName)}`}>
+                                                                    {task.companyName}
+                                                                </span>
+                                                            </div>
+                                                            {task.brand && (
+                                                                <div className="flex items-center justify-between text-sm">
+                                                                    <span className="text-gray-500 flex items-center gap-2">
+                                                                        <Tag className="h-4 w-4" />
+                                                                        Brand
+                                                                    </span>
+                                                                    <span className={`px-2 py-1 text-xs rounded-full border ${getBrandColor(task.brand)}`}>
+                                                                        {task.brand}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
 
-                                                    <div className="flex gap-2 pt-4 border-t border-gray-100">
-                                                        <button
-                                                            onClick={() => handleToggleTaskStatus(task.id, task.status)}
-                                                            disabled={!canMarkTaskDone(task)}
-                                                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${canMarkTaskDone(task)
-                                                                ? task.status === 'completed'
-                                                                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                                                    : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                                                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                                                }`}
-                                                        >
-                                                            {task.status === 'completed' ? 'Mark Pending' : 'Complete'}
-                                                        </button>
-                                                        {canEditDeleteTask(task) && (
+                                                        <div className="flex gap-2 pt-4 border-t border-gray-100">
                                                             <button
-                                                                onClick={() => handleDeleteTask(task.id)}
-                                                                className="px-3 py-2 text-sm font-medium bg-rose-50 text-rose-700 rounded-lg hover:bg-rose-100 transition-colors"
+                                                                onClick={() => handleToggleTaskStatus(task.id, task.status)}
+                                                                disabled={!canMarkTaskDone(task)}
+                                                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${canMarkTaskDone(task)
+                                                                    ? task.status === 'completed'
+                                                                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                                                        : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                                                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                                    }`}
                                                             >
-                                                                Delete
-                                                            </button>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="absolute top-4 right-4">
-                                                        <span className="text-xs text-gray-400 flex items-center gap-1">
-                                                            <Tag className="h-3 w-3" />
-                                                            {task.taskType}
-                                                        </span>
-                                                    </div>
-
-                                                    {openMenuId === task.id && (
-                                                        <div className="absolute right-5 top-12 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-10">
-                                                            <button
-                                                                onClick={() => {
-                                                                    handleOpenEditModal(task);
-                                                                }}
-                                                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                                            >
-                                                                <Edit className="h-4 w-4" />
-                                                                Edit Task
+                                                                {task.status === 'completed' ? 'Mark Pending' : 'Complete'}
                                                             </button>
                                                             {canEditDeleteTask(task) && (
                                                                 <button
-                                                                    onClick={() => {
-                                                                        handleDeleteTask(task.id);
-                                                                        setOpenMenuId(null);
-                                                                    }}
-                                                                    className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                                                                    onClick={() => handleDeleteTask(task.id)}
+                                                                    className="px-3 py-2 text-sm font-medium bg-rose-50 text-rose-700 rounded-lg hover:bg-rose-100 transition-colors"
                                                                 >
-                                                                    Delete Task
+                                                                    Delete
                                                                 </button>
                                                             )}
                                                         </div>
-                                                    )}
-                                                </div>
-                                            ))}
+
+                                                        <div className="absolute top-4 right-4">
+                                                            <span className="text-xs text-gray-400 flex items-center gap-1">
+                                                                <Tag className="h-3 w-3" />
+                                                                {task.taskType}
+                                                            </span>
+                                                        </div>
+
+                                                        {openMenuId === task.id && (
+                                                            <div className="absolute right-5 top-12 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-10">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        handleOpenEditModal(task);
+                                                                    }}
+                                                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                                                >
+                                                                    <Edit className="h-4 w-4" />
+                                                                    Edit Task
+                                                                </button>
+                                                                {canEditDeleteTask(task) && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            handleDeleteTask(task.id);
+                                                                            setOpenMenuId(null);
+                                                                        }}
+                                                                        className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                                                                    >
+                                                                        Delete Task
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
                                         </div>
                                     ) : (
                                         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -2699,112 +2307,131 @@ const DashboardPage = () => {
                                                         </tr>
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
-                                                        {displayTasks.map((task) => (
-                                                            <tr key={task.id} className="hover:bg-gray-50 transition-colors">
-                                                                <td className="px-6 py-4">
-                                                                    <div>
-                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                            <span className="text-sm font-semibold text-gray-900">
-                                                                                {task.title}
-                                                                            </span>
-                                                                            {task.completedApproval && (
-                                                                                <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full">
-                                                                                    ✅ Approved
-                                                                                </span>
-                                                                            )}
-                                                                            <span className={`px-2 py-0.5 text-xs rounded-full border ${getCompanyColor(task.companyName)}`}>
-                                                                                {task.companyName}
-                                                                            </span>
-                                                                            {task.brand && (
-                                                                                <span className={`px-2 py-0.5 text-xs rounded-full border ${getBrandColor(task.brand)}`}>
-                                                                                    {task.brand}
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="text-sm text-gray-500 truncate max-w-xs">
-                                                                            {task.description || 'No description'}
-                                                                        </div>
-                                                                        <div className="text-xs text-gray-400 mt-1 flex items-center gap-2">
-                                                                            <Tag className="h-3 w-3" />
-                                                                            {task.taskType}
-                                                                        </div>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white text-sm font-medium">
-                                                                            {getAssignedUserInfo(task).name.charAt(0)}
-                                                                        </div>
+                                                        {displayTasks
+                                                            .filter((task: Task) => {
+                                                                if (filters.taskType !== 'all') {
+                                                                    const filterType = filters.taskType.toLowerCase();
+                                                                    const taskType = (task.taskType || (task as any).type || '').toLowerCase();
+                                                                    if (taskType !== filterType) return false;
+                                                                }
+
+                                                                if (filters.company !== 'all') {
+                                                                    const filterCompany = filters.company.toLowerCase();
+                                                                    const taskCompany = (task.companyName || (task as any).company || '').toLowerCase();
+                                                                    if (taskCompany !== filterCompany) return false;
+                                                                }
+
+                                                                if (filters.brand !== 'all') {
+                                                                    const filterBrand = filters.brand.toLowerCase();
+                                                                    const taskBrand = (task.brand || '').toLowerCase();
+                                                                    if (taskBrand !== filterBrand) return false;
+                                                                }
+
+                                                                return true;
+                                                            })
+                                                            .map((task) => (
+                                                                <tr key={task.id} className="hover:bg-gray-50 transition-colors">
+                                                                    <td className="px-6 py-4">
                                                                         <div>
-                                                                            <div className="text-sm font-medium text-gray-900">
-                                                                                {getAssignedUserInfo(task).name}
+                                                                            <div className="flex items-center gap-2 mb-1">
+                                                                                <span className="text-sm font-semibold text-gray-900">
+                                                                                    {task.title}
+                                                                                </span>
+                                                                                {task.completedApproval && (
+                                                                                    <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full">
+                                                                                        ✅ Approved
+                                                                                    </span>
+                                                                                )}
+                                                                                <span className={`px-2 py-0.5 text-xs rounded-full border ${getCompanyColor(task.companyName)}`}>
+                                                                                    {task.companyName}
+                                                                                </span>
+                                                                                {task.brand && (
+                                                                                    <span className={`px-2 py-0.5 text-xs rounded-full border ${getBrandColor(task.brand)}`}>
+                                                                                        {task.brand}
+                                                                                    </span>
+                                                                                )}
                                                                             </div>
-                                                                            <div className="text-xs text-gray-500">
-                                                                                {getAssignedUserInfo(task).email}
+                                                                            <div className="text-sm text-gray-500 truncate max-w-xs">
+                                                                                {task.description || 'No description'}
+                                                                            </div>
+                                                                            <div className="text-xs text-gray-400 mt-1 flex items-center gap-2">
+                                                                                <Tag className="h-3 w-3" />
+                                                                                {task.taskType}
                                                                             </div>
                                                                         </div>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className={`text-sm font-medium ${isOverdue(task.dueDate, task.status)
-                                                                        ? 'text-rose-600'
-                                                                        : 'text-gray-900'
-                                                                        }`}>
-                                                                        {formatDate(task.dueDate)}
-                                                                    </div>
-                                                                    <div className="text-xs text-gray-500">
-                                                                        {isOverdue(task.dueDate, task.status) ? 'Overdue' : 'On track'}
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(task.status)}`}>
-                                                                        {task.status}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getPriorityColor(task.priority || 'medium')}`}>
-                                                                        {task.priority}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <button
-                                                                            onClick={() => handleToggleTaskStatus(task.id, task.status)}
-                                                                            disabled={!canMarkTaskDone(task)}
-                                                                            className={`px-3 py-1.5 text-xs font-medium rounded-lg ${canMarkTaskDone(task)
-                                                                                ? task.status === 'completed'
-                                                                                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                                                                    : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                                                                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                                                                }`}
-                                                                        >
-                                                                            {task.status === 'completed' ? 'Pending' : 'Complete'}
-                                                                        </button>
-                                                                        {canEditDeleteTask(task) && (
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white text-sm font-medium">
+                                                                                {getAssignedUserInfo(task).name.charAt(0)}
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="text-sm font-medium text-gray-900">
+                                                                                    {getAssignedUserInfo(task).name}
+                                                                                </div>
+                                                                                <div className="text-xs text-gray-500">
+                                                                                    {getAssignedUserInfo(task).email}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                        <div className={`text-sm font-medium ${isOverdue(task.dueDate, task.status)
+                                                                            ? 'text-rose-600'
+                                                                            : 'text-gray-900'
+                                                                            }`}>
+                                                                            {formatDate(task.dueDate)}
+                                                                        </div>
+                                                                        <div className="text-xs text-gray-500">
+                                                                            {isOverdue(task.dueDate, task.status) ? 'Overdue' : 'On track'}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                        <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(task.status)}`}>
+                                                                            {task.status}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                        <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getPriorityColor(task.priority || 'medium')}`}>
+                                                                            {task.priority}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                        <div className="flex items-center gap-2">
                                                                             <button
-                                                                                onClick={() => handleOpenEditModal(task)}
-                                                                                className="px-3 py-1.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-1"
+                                                                                onClick={() => handleToggleTaskStatus(task.id, task.status)}
+                                                                                disabled={!canMarkTaskDone(task)}
+                                                                                className={`px-3 py-1.5 text-xs font-medium rounded-lg ${canMarkTaskDone(task)
+                                                                                    ? task.status === 'completed'
+                                                                                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                                                                        : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                                                                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                                                    }`}
                                                                             >
-                                                                                <Edit className="h-3 w-3" />
-                                                                                Edit
+                                                                                {task.status === 'completed' ? 'Pending' : 'Complete'}
                                                                             </button>
-                                                                        )}
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
+                                                                            {canEditDeleteTask(task) && (
+                                                                                <button
+                                                                                    onClick={() => handleOpenEditModal(task)}
+                                                                                    className="px-3 py-1.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-1"
+                                                                                >
+                                                                                    <Edit className="h-3 w-3" />
+                                                                                    Edit
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
                                                     </tbody>
                                                 </table>
                                             </div>
                                         </div>
                                     )}
-
-                                    {/* Brands Section */}
-                                    {renderBrandsSection()}
                                 </>
                             ) : currentView === 'all-tasks' ? (
                                 <AllTasksPage
-                                    tasks={visibleTasks}
+                                    tasks={tasks}
                                     filter={filters.status}
                                     setFilter={(value) => handleFilterChange('status', value)}
                                     dateFilter={filters.date}
@@ -2839,10 +2466,11 @@ const DashboardPage = () => {
                                     onFetchTaskHistory={handleFetchTaskHistory}
                                     onBulkCreateTasks={handleBulkCreateTasks}
                                     isSidebarCollapsed={isSidebarCollapsed}
+                                    brands={brands}
                                 />
                             ) : currentView === 'calendar' ? (
                                 <CalendarView
-                                    tasks={visibleTasks}
+                                    tasks={tasks}
                                     currentUser={{
                                         id: currentUser.id || '',
                                         name: currentUser.name || 'User',
@@ -2883,7 +2511,7 @@ const DashboardPage = () => {
                             ) : currentView === 'team' ? (
                                 <TeamPage
                                     users={users}
-                                    tasks={visibleTasks}
+                                    tasks={tasks}
                                     onUpdateUser={handleUpdateUser}
                                     onDeleteUser={handleDeleteUser}
                                     onAddUser={handleCreateUser}
@@ -2896,24 +2524,22 @@ const DashboardPage = () => {
                                     formatDate={formatDate}
                                 />
                             ) : currentView === 'brands' ? (
-                                selectedBrandId ? (
-                                    <BrandDetailPage
-                                        brands={brands}
-                                        currentUser={currentUser}
-                                        isSidebarCollapsed={isSidebarCollapsed}
-                                        brandId={selectedBrandId}
-                                        onBack={() => setSelectedBrandId(null)}
-                                        availableUsers={users}
-                                        onInviteCollaborator={handleInviteCollaboratorToBrand}
-                                        tasks={tasks}
-                                    />
-                                ) : (
-                                    <BrandsListPage
-                                        brands={brands}
-                                        isSidebarCollapsed={isSidebarCollapsed}
-                                        onSelectBrand={(brandId) => setSelectedBrandId(brandId)}
-                                    />
-                                )
+                                <BrandsListPage
+                                    isSidebarCollapsed={isSidebarCollapsed}
+                                    onSelectBrand={(brandId) => {
+                                        setSelectedBrandId(brandId);
+                                        setCurrentView('brand-detail');
+                                    }}
+                                />
+                            ) : currentView === 'brand-detail' ? (
+                                <BrandDetailPage
+                                    brandId={selectedBrandId || ''}
+                                    brands={brands}
+                                    currentUser={currentUser}
+                                    isSidebarCollapsed={isSidebarCollapsed}
+                                    onBack={() => setCurrentView('brands')}
+                                    tasks={tasks}
+                                />
                             ) : null}
                         </div>
                     </div>
@@ -3070,43 +2696,170 @@ const DashboardPage = () => {
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-900 mb-2">
-                                            Company
-                                        </label>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="block text-sm font-medium text-gray-900">
+                                                Company *
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    const newCompanyName = prompt('Enter new company name:');
+                                                    if (newCompanyName && newCompanyName.trim()) {
+                                                        const company = newCompanyName.trim();
+
+                                                        if (!availableCompanies.includes(company)) {
+                                                            try {
+                                                                const res = await brandService.createBrand({
+                                                                    name: `${company} Standard`,
+                                                                    company: company,
+                                                                    description: `Default brand for ${company}`,
+                                                                    status: 'active',
+                                                                });
+
+                                                                if (res.success && res.data) {
+                                                                    setApiBrands(prev => [...prev, res.data]);
+                                                                    handleInputChange('companyName', company);
+                                                                    handleInputChange('brand', res.data.name);
+                                                                    toast.success('Company added successfully!');
+                                                                }
+                                                            } catch (err) {
+                                                                console.error('Error creating company:', err);
+                                                                toast.error('Failed to create company');
+                                                            }
+                                                        } else {
+                                                            toast.error('Company already exists');
+                                                        }
+                                                    }
+                                                }}
+                                                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                                            >
+                                                <PlusCircle className="h-3 w-3" />
+                                                Add New Company
+                                            </button>
+                                        </div>
+
                                         <select
                                             value={newTask.companyName}
                                             onChange={e => handleInputChange('companyName', e.target.value)}
-                                            className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.companyName ? 'border-red-500' : 'border-gray-300'
+                                                }`}
                                         >
-                                            <option value="">Select company</option>
-                                            {allCompanies.map(company => (
-                                                <option key={company} value={company.toLowerCase()}>
+                                            <option value="">Select a company</option>
+                                            {availableCompanies.map(company => (
+                                                <option key={company} value={company}>
                                                     {company}
                                                 </option>
                                             ))}
                                         </select>
+
+                                        {availableCompanies.length === 0 ? (
+                                            <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                                <p className="text-xs text-yellow-700">
+                                                    No companies available. Add a company to get started.
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                {availableCompanies.length} companies available
+                                            </p>
+                                        )}
+
+                                        {formErrors.companyName && (
+                                            <p className="mt-1 text-sm text-red-600">{formErrors.companyName}</p>
+                                        )}
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-900 mb-2">
-                                            Brand
-                                        </label>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="block text-sm font-medium text-gray-900">
+                                                Brand *
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    if (!newTask.companyName) {
+                                                        toast.error('Please select a company first');
+                                                        return;
+                                                    }
+
+                                                    const newBrandName = prompt(`Enter new brand name for ${newTask.companyName}:`);
+                                                    if (newBrandName && newBrandName.trim()) {
+                                                        const brandName = newBrandName.trim();
+
+                                                        // Check if brand already exists
+                                                        const existingBrands = getAvailableBrands();
+                                                        if (existingBrands.includes(brandName)) {
+                                                            toast.error('Brand already exists for this company');
+                                                            return;
+                                                        }
+
+                                                        try {
+                                                            const res = await brandService.createBrand({
+                                                                name: brandName,
+                                                                company: newTask.companyName,
+                                                                description: '',
+                                                                status: 'active',
+                                                            });
+
+                                                            if (res.success && res.data) {
+                                                                setApiBrands(prev => [...prev, res.data]);
+                                                                handleInputChange('brand', brandName);
+                                                                toast.success('Brand added successfully!');
+                                                            }
+                                                        } catch (err) {
+                                                            console.error('Error creating brand:', err);
+                                                            toast.error('Failed to create brand');
+                                                        }
+                                                    }
+                                                }}
+                                                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                                                disabled={!newTask.companyName}
+                                            >
+                                                <PlusCircle className="h-3 w-3" />
+                                                Add New Brand
+                                            </button>
+                                        </div>
+
                                         <select
-                                            className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             value={newTask.brand}
                                             onChange={e => handleInputChange('brand', e.target.value)}
+                                            className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.brand ? 'border-red-500' : 'border-gray-300'
+                                                }`}
                                             disabled={!newTask.companyName}
                                         >
                                             <option value="">Select a brand</option>
-                                            {getAvailableBrands(newTask.companyName).map((brand) => (
-                                                <option key={brand.id} value={brand.name.toLowerCase()}>
-                                                    {brand.name}
+                                            {getAvailableBrands().map((brand) => (
+                                                <option key={brand} value={brand}>
+                                                    {brand}
                                                 </option>
                                             ))}
                                         </select>
-                                        <p className="mt-1 text-xs text-gray-500">
-                                            Select a company first to see available brands
-                                        </p>
+
+                                        {newTask.companyName && (
+                                            <div className="mt-2">
+                                                {getAvailableBrands().length === 0 ? (
+                                                    <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                                        <p className="text-xs text-yellow-700">
+                                                            No brands found for {newTask.companyName}. Add a brand to continue.
+                                                        </p>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-xs text-gray-500">
+                                                        {getAvailableBrands().length} brands available for {newTask.companyName}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {!newTask.companyName && (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Select a company first to see available brands
+                                            </p>
+                                        )}
+
+                                        {formErrors.brand && (
+                                            <p className="mt-1 text-sm text-red-600">{formErrors.brand}</p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -3320,9 +3073,9 @@ const DashboardPage = () => {
                                             onChange={e => handleEditInputChange('companyName', e.target.value)}
                                             className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         >
-                                            <option value="">Select company</option>
-                                            {allCompanies.map(company => (
-                                                <option key={company} value={company.toLowerCase()}>
+                                            <option value="">Select a company</option>
+                                            {availableCompanies.map(company => (
+                                                <option key={company} value={company}>
                                                     {company}
                                                 </option>
                                             ))}
@@ -3340,15 +3093,17 @@ const DashboardPage = () => {
                                             disabled={!editFormData.companyName}
                                         >
                                             <option value="">Select a brand</option>
-                                            {getAvailableBrands(editFormData.companyName).map((brand) => (
-                                                <option key={brand.id} value={brand.name.toLowerCase()}>
-                                                    {brand.name}
+                                            {getEditFormAvailableBrands().map((brand) => (
+                                                <option key={brand} value={brand}>
+                                                    {brand}
                                                 </option>
                                             ))}
                                         </select>
-                                        <p className="mt-1 text-xs text-gray-500">
-                                            Select a company first to see available brands
-                                        </p>
+                                        {!editFormData.companyName && (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Select a company first to see available brands
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -3383,94 +3138,6 @@ const DashboardPage = () => {
                                             Update Task
                                         </span>
                                     )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Invite Collaborator Modal */}
-            {showInviteModal && selectedBrandForInvite && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-                        onClick={() => {
-                            setShowInviteModal(false);
-                            setSelectedBrandForInvite(null);
-                            setInviteEmail('');
-                        }}
-                    />
-
-                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
-                        <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-5">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-white/20 rounded-xl">
-                                        <Mail className="h-6 w-6 text-white" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-xl font-semibold text-white">
-                                            Invite Collaborator
-                                        </h3>
-                                        <p className="text-sm text-blue-100 mt-0.5">
-                                            Invite someone to collaborate on this brand
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        setShowInviteModal(false);
-                                        setSelectedBrandForInvite(null);
-                                        setInviteEmail('');
-                                    }}
-                                    className="p-1.5 text-white hover:bg-white/20 rounded-lg"
-                                >
-                                    <X className="h-5 w-5" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="px-6 py-6">
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-900 mb-2">
-                                        Email Address
-                                    </label>
-                                    <input
-                                        type="email"
-                                        placeholder="Enter email address"
-                                        className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        value={inviteEmail}
-                                        onChange={(e) => setInviteEmail(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="px-6 py-5 bg-gray-50 border-t border-gray-200">
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowInviteModal(false);
-                                        setSelectedBrandForInvite(null);
-                                        setInviteEmail('');
-                                    }}
-                                    className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => handleInviteCollaborator(selectedBrandForInvite, inviteEmail, inviteRole)}
-                                    disabled={!inviteEmail}
-                                    className={`px-5 py-2.5 text-sm font-medium text-white rounded-xl ${!inviteEmail
-                                        ? 'bg-blue-400 cursor-not-allowed'
-                                        : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700'
-                                        }`}
-                                >
-                                    Send Invitation
                                 </button>
                             </div>
                         </div>
