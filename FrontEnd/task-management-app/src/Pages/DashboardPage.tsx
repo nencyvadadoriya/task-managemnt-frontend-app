@@ -2466,7 +2466,7 @@ const DashboardPage = () => {
                                     onFetchTaskHistory={handleFetchTaskHistory}
                                     onBulkCreateTasks={handleBulkCreateTasks}
                                     isSidebarCollapsed={isSidebarCollapsed}
-                                    brands={brands}
+                                    brands={apiBrands}
                                 />
                             ) : currentView === 'calendar' ? (
                                 <CalendarView
@@ -2534,7 +2534,7 @@ const DashboardPage = () => {
                             ) : currentView === 'brand-detail' ? (
                                 <BrandDetailPage
                                     brandId={selectedBrandId || ''}
-                                    brands={brands}
+                                    brands={apiBrands}
                                     currentUser={currentUser}
                                     isSidebarCollapsed={isSidebarCollapsed}
                                     onBack={() => setCurrentView('brands')}
