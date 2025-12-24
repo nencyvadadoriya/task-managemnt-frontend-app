@@ -106,6 +106,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
 
     let isMounted = true;
+    let authInstance: any = null;
 
     const initClient = () => {
       gapi.client
@@ -117,48 +118,108 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         })
         .then(() => {
           if (!isMounted) return;
+          // Initialize auth2 library
+          return gapi.auth2.init({
+            client_id: googleClientId,
+            scope: 'https://www.googleapis.com/auth/calendar.readonly'
+          });
+        })
+        .then((auth: any) => {
+          if (!isMounted || !auth) return;
+          authInstance = auth;
           setGoogleAuthReady(true);
           setGoogleError(null);
-          const auth = gapi.auth2.getAuthInstance();
           const handleSignInChange = (signedIn: boolean) => {
             if (!isMounted) return;
             setIsGoogleSignedIn(signedIn);
+            if (!signedIn) {
+              setGoogleEvents([]);
+              setGoogleEventLinks({});
+            }
           };
 
-          handleSignInChange(auth.isSignedIn.get());
+          const isSignedIn = auth.isSignedIn.get();
+          handleSignInChange(isSignedIn);
           auth.isSignedIn.listen(handleSignInChange);
         })
         .catch((error: any) => {
           console.error('Error initializing Google API client', error);
           if (isMounted) {
             setGoogleAuthReady(false);
-            setGoogleError('Unable to initialize Google Calendar sync. Check console for details.');
+            setIsGoogleSignedIn(false);
+            const errorMessage = error?.details || error?.error?.message || error?.message || 'Unknown error occurred';
+            setGoogleError(`Google Calendar initialization failed: ${errorMessage}`);
           }
         });
     };
 
     setGoogleError(null);
-    gapi.load('client:auth2', initClient);
+    gapi.load('client:auth2', {
+      callback: initClient,
+      onerror: () => {
+        if (isMounted) {
+          setGoogleError('Failed to load Google API libraries. Please check your internet connection.');
+          setGoogleAuthReady(false);
+        }
+      },
+      timeout: 10000,
+      ontimeout: () => {
+        if (isMounted) {
+          setGoogleError('Google API loading timed out. Please refresh the page.');
+          setGoogleAuthReady(false);
+        }
+      }
+    });
 
     return () => {
       isMounted = false;
+      // Clean up listeners
+      if (authInstance && authInstance.isSignedIn) {
+        authInstance.isSignedIn.removeListener(() => {});
+      }
     };
   }, [googleApiKey, googleClientId]);
 
-  const handleGoogleSignIn = useCallback(() => {
-    if (!googleAuthReady) return;
-    const authInstance = gapi.auth2.getAuthInstance();
-    authInstance.signIn();
+  const handleGoogleSignIn = useCallback(async () => {
+    if (!googleAuthReady) {
+      setGoogleError('Google Calendar is not ready yet. Please wait...');
+      return;
+    }
+    try {
+      const authInstance = gapi.auth2.getAuthInstance();
+      if (!authInstance) {
+        setGoogleError('Google Auth instance not found. Please refresh the page.');
+        return;
+      }
+      await authInstance.signIn({
+        prompt: 'select_account',
+        ux_mode: 'popup'
+      });
+    } catch (error: any) {
+      console.error('Google sign in error:', error);
+      const errorMessage = error?.error || error?.message || 'Failed to sign in with Google';
+      setGoogleError(`Sign in failed: ${errorMessage}`);
+    }
   }, [googleAuthReady]);
 
-  const handleGoogleSignOut = useCallback(() => {
+  const handleGoogleSignOut = useCallback(async () => {
     if (!googleAuthReady) return;
-    const authInstance = gapi.auth2.getAuthInstance();
-    authInstance.signOut();
+    try {
+      const authInstance = gapi.auth2.getAuthInstance();
+      if (authInstance) {
+        await authInstance.signOut();
+        setGoogleEvents([]);
+        setGoogleEventLinks({});
+      }
+    } catch (error: any) {
+      console.error('Google sign out error:', error);
+      setGoogleError('Failed to sign out from Google Calendar');
+    }
   }, [googleAuthReady]);
 
   const fetchGoogleEvents = useCallback(async () => {
     if (!googleAuthReady || !isGoogleSignedIn) {
+      setGoogleError('Please connect to Google Calendar first');
       return;
     }
 
@@ -166,6 +227,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     setGoogleError(null);
 
     try {
+      // Verify token is still valid
+      const authInstance = gapi.auth2.getAuthInstance();
+      if (!authInstance.isSignedIn.get()) {
+        setIsGoogleSignedIn(false);
+        setGoogleError('Google Calendar session expired. Please reconnect.');
+        return;
+      }
+
       const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
       const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999);
 
@@ -191,9 +260,24 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
       setGoogleEvents(mappedTasks);
       setGoogleEventLinks(linkMap);
-    } catch (error) {
+      setGoogleError(null);
+    } catch (error: any) {
       console.error('Error loading Google Calendar events', error);
-      setGoogleError('Unable to load Google Calendar events right now.');
+      // Handle specific error cases
+      if (error.status === 401 || error.code === 401) {
+        setIsGoogleSignedIn(false);
+        setGoogleError('Google Calendar authorization expired. Please reconnect.');
+      } else if (error.status === 403) {
+        setGoogleError('Access denied to Google Calendar. Please check permissions.');
+      } else if (error.status === 429) {
+        setGoogleError('Too many requests to Google Calendar. Please try again later.');
+      } else {
+        const errorMessage = error?.result?.error?.message || error?.message || 'Failed to load Google Calendar events';
+        setGoogleError(`Calendar sync error: ${errorMessage}`);
+      }
+      // Clear events on error
+      setGoogleEvents([]);
+      setGoogleEventLinks({});
     } finally {
       setLoadingGoogleEvents(false);
     }

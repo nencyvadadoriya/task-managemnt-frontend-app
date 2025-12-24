@@ -253,7 +253,7 @@ const validateBulkDraft = (draft: BulkTaskDraft): BulkTaskDraft => {
   };
 };
 
-// ==================== BULK IMPORTER COMPONENT ====================
+// ==================== BULK IMPORTER COMPONENT ===================
 const BulkImporter = memo(({
   draftTasks = [],
   defaults,
@@ -339,7 +339,7 @@ const BulkImporter = memo(({
         id: draftId,
         rowNumber: draftTasks.length + index + 1,
         title,
-        description: '',
+        description: '', // ✅ Empty description - user will fill
         assigner: defaults.assigner,
         dueDate: defaults.dueDate,
         priority: defaults.priority,
@@ -490,7 +490,7 @@ const BulkImporter = memo(({
 
         {/* Top Controls - All Dropdowns */}
         <div className="px-6 py-4 border-b bg-gray-50">
-          {/* Filter Dropdowns Grid - Updated to 6 columns */}
+          {/* Filter Dropdowns Grid - Updated to 6 columns (no description in defaults) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
             {/* Default Assigner */}
             <div>
@@ -716,18 +716,19 @@ Add user notifications
                 </div>
               </div>
 
-              {/* Tasks Table - Updated with Task Type column */}
+              {/* Tasks Table - Updated with Description column */}
               <div className="border border-gray-200 rounded-xl overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr className="text-xs uppercase tracking-wide text-gray-500">
                       <th className="px-4 py-3 text-left w-16">#</th>
                       <th className="px-4 py-3 text-left">Task Title *</th>
+                      <th className="px-4 py-3 text-left">Description</th> {/* ✅ New column */}
                       <th className="px-4 py-3 text-left w-48">Assigner *</th>
                       <th className="px-4 py-3 text-left w-48">Company & Brand</th>
                       <th className="px-4 py-3 text-left w-36">Due Date</th>
                       <th className="px-4 py-3 text-left w-28">Priority</th>
-                      <th className="px-4 py-3 text-left w-28">Task Type</th> {/* ✅ New column */}
+                      <th className="px-4 py-3 text-left w-28">Task Type</th>
                       <th className="px-4 py-3 text-left w-20">Actions</th>
                     </tr>
                   </thead>
@@ -759,6 +760,17 @@ Add user notifications
                             {draft.errors.some(e => e.includes('Title')) && (
                               <p className="text-xs text-red-600 mt-1">Task title is required</p>
                             )}
+                          </td>
+
+                          {/* ✅ Description Column */}
+                          <td className="px-4 py-3">
+                            <textarea
+                              value={draft.description}
+                              onChange={(e) => handleFieldChange(draft.id, 'description', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-h-[60px]"
+                              placeholder="Enter task description (optional)"
+                              rows={2}
+                            />
                           </td>
 
                           {/* Assigner */}
